@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
-  enrolled INTEGER NOT NULL DEFAULT 0,
+  enrolled BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS baselines (
   avg_features TEXT NOT NULL,      -- JSON (AllFeatures averaged)
   avg_ml_features TEXT NOT NULL,   -- JSON (MLFeatureVector averaged)
   feature_std_devs TEXT NOT NULL,  -- JSON (per-feature standard deviations)
-  has_pressure_data INTEGER NOT NULL DEFAULT 0,
+  has_pressure_data BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
   user_id TEXT NOT NULL REFERENCES users(id),
   score REAL NOT NULL,
   threshold REAL NOT NULL,
-  authenticated INTEGER NOT NULL,
+  authenticated BOOLEAN NOT NULL,
   breakdown TEXT NOT NULL,         -- JSON (FeatureComparison)
   device_capabilities TEXT NOT NULL, -- JSON
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
