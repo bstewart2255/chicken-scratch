@@ -64,6 +64,27 @@ export class ApiClient {
     });
   }
 
+  async getConsentStatus(externalUserId: string) {
+    return this.request<{
+      externalUserId: string;
+      hasConsented: boolean;
+      policyVersion: string | null;
+      consentedAt: string | null;
+      isCurrentVersion: boolean;
+    }>(`/api/v1/consent/${encodeURIComponent(externalUserId)}`);
+  }
+
+  async recordConsent(externalUserId: string, policyVersion: string) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      consentedAt: string;
+    }>('/api/v1/consent', {
+      method: 'POST',
+      body: JSON.stringify({ externalUserId, policyVersion }),
+    });
+  }
+
   async verifyFull(body: {
     externalUserId: string;
     signatureData: RawSignatureData;

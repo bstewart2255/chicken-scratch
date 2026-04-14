@@ -5,8 +5,10 @@ import { TenantEnrollRequestSchema, TenantShapeEnrollRequestSchema, TenantVerify
 import { enrollSample, enrollShape, getEnrollmentStatus } from '../services/enrollment.service.js';
 import { verifyFull } from '../services/auth.service.js';
 import { createChallenge } from '../services/session.service.js';
+import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate } from '../services/consent.service.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
+import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
 
 const router = Router();
 
@@ -15,31 +17,112 @@ router.use('/api/v1', requireApiKey);
 
 /**
  * Resolve externalUserId to internal username.
- * Creates user + mapping if they don't exist yet (enrollment flow).
+ * Creates user + mapping if they don't exist yet.
  */
-async function resolveUser(tenantId: string, externalUserId: string, createIfMissing: boolean = false) {
+async function resolveUser(tenantId: string, externalUserId: string, createIfMissing = false) {
   const internalUsername = tenantRepo.toInternalUsername(tenantId, externalUserId);
-
   const mapping = await tenantRepo.findTenantUser(tenantId, externalUserId);
   if (mapping) {
     return { username: internalUsername, userId: mapping.user_id, exists: true };
   }
-
   if (!createIfMissing) {
     return { username: internalUsername, userId: null, exists: false };
   }
-
   const user = await userRepo.createUser(internalUsername);
   await tenantRepo.createTenantUser(tenantId, externalUserId, user.id);
   return { username: internalUsername, userId: user.id, exists: true };
 }
 
-// --- Enrollment ---
+// ─── Consent ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/consent
+ * Record explicit biometric data consent for a user.
+ * Must be called before enrollment. Required for BIPA/GDPR compliance.
+ */
+router.post('/api/v1/consent', async (req, res, next) => {
+  try {
+    const { externalUserId, policyVersion } = req.body;
+    const tenant = req.tenant!;
+
+    if (!externalUserId || typeof externalUserId !== 'string') {
+      res.status(400).json({ success: false, error: 'externalUserId is required.' });
+      return;
+    }
+
+    const version = policyVersion ?? CURRENT_POLICY_VERSION;
+    const ip = req.ip ?? req.headers['x-forwarded-for'] as string ?? null;
+    const userAgent = req.headers['user-agent'] ?? null;
+
+    const result = await recordConsent(tenant.id, externalUserId, version, ip, userAgent);
+    res.json({
+      success: true,
+      externalUserId,
+      policyVersion: version,
+      consentedAt: result.consentedAt,
+      message: result.message,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/consent/:externalUserId
+ * Check a user's current consent status.
+ */
+router.get('/api/v1/consent/:externalUserId', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const { externalUserId } = req.params;
+
+    const status = await getConsentStatus(tenant.id, externalUserId);
+    res.json({
+      externalUserId,
+      hasConsented: status.hasConsented,
+      policyVersion: status.policyVersion,
+      consentedAt: status.consentedAt,
+      isCurrentVersion: status.isCurrentVersion,
+      currentPolicyVersion: CURRENT_POLICY_VERSION,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/v1/consent/:externalUserId
+ * Withdraw biometric data consent (GDPR / BIPA right to erasure trigger).
+ */
+router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const { externalUserId } = req.params;
+
+    const result = await withdrawConsent(tenant.id, externalUserId);
+    res.status(result.success ? 200 : 404).json({
+      success: result.success,
+      externalUserId,
+      message: result.message,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Enrollment ──────────────────────────────────────────────────────────────
 
 router.post('/api/v1/enroll', validate(TenantEnrollRequestSchema), async (req, res, next) => {
   try {
     const { externalUserId, signatureData } = req.body;
     const tenant = req.tenant!;
+
+    // Consent gate — block enrollment if user hasn't consented
+    const consentError = await checkConsentGate(tenant.id, externalUserId);
+    if (consentError) {
+      res.status(403).json({ success: false, error: consentError });
+      return;
+    }
 
     const { username } = await resolveUser(tenant.id, externalUserId, true);
     const result = await enrollSample(username, signatureData);
@@ -61,6 +144,13 @@ router.post('/api/v1/enroll/shape', validate(TenantShapeEnrollRequestSchema), as
   try {
     const { externalUserId, shapeType, signatureData } = req.body;
     const tenant = req.tenant!;
+
+    // Consent gate
+    const consentError = await checkConsentGate(tenant.id, externalUserId);
+    if (consentError) {
+      res.status(403).json({ success: false, error: consentError });
+      return;
+    }
 
     const { username, exists } = await resolveUser(tenant.id, externalUserId);
     if (!exists) {
@@ -100,7 +190,7 @@ router.get('/api/v1/enroll/:externalUserId/status', async (req, res, next) => {
   }
 });
 
-// --- Verification ---
+// ─── Verification ─────────────────────────────────────────────────────────────
 
 router.post('/api/v1/challenge', validate(TenantChallengeRequestSchema), async (req, res, next) => {
   try {
@@ -156,7 +246,7 @@ router.post('/api/v1/verify', validate(TenantVerifyFullRequestSchema), async (re
   }
 });
 
-// --- User management ---
+// ─── User management ──────────────────────────────────────────────────────────
 
 router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
   try {

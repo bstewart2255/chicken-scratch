@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biometric Data Privacy Policy — chickenScratch</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: #1a1a1a;
+      background: #fff;
+      padding: 0 16px;
+    }
+    .wrapper { max-width: 720px; margin: 0 auto; padding: 48px 0 80px; }
+    .logo { font-size: 22px; font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }
+    .logo span { color: #2563eb; }
+    .badge {
+      display: inline-block; margin-top: 8px;
+      font-size: 11px; font-weight: 600; letter-spacing: 1px;
+      text-transform: uppercase; color: #6b7280;
+      background: #f3f4f6; border-radius: 4px; padding: 2px 8px;
+    }
+    h1 { font-size: 28px; font-weight: 800; margin: 32px 0 4px; color: #1a1a2e; }
+    .subtitle { font-size: 14px; color: #6b7280; margin-bottom: 32px; }
+    .effective {
+      background: #eff6ff; border-left: 4px solid #2563eb;
+      padding: 12px 16px; border-radius: 0 6px 6px 0;
+      font-size: 14px; color: #1e40af; margin-bottom: 40px;
+    }
+    h2 {
+      font-size: 18px; font-weight: 700; margin: 36px 0 12px;
+      color: #1a1a2e; padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; color: #374151; }
+    p { margin-bottom: 14px; color: #374151; }
+    ul, ol { margin: 0 0 14px 24px; color: #374151; }
+    li { margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 14px; }
+    th { background: #f9fafb; padding: 10px 12px; text-align: left; font-weight: 600; color: #374151; border: 1px solid #e5e7eb; }
+    td { padding: 10px 12px; border: 1px solid #e5e7eb; color: #374151; vertical-align: top; }
+    .highlight {
+      background: #fefce8; border: 1px solid #fef08a;
+      border-radius: 6px; padding: 14px 16px; margin: 16px 0;
+      font-size: 14px; color: #713f12;
+    }
+    .contact-box {
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 8px; padding: 20px; margin-top: 12px;
+    }
+    .contact-box p { margin-bottom: 4px; }
+    footer {
+      margin-top: 56px; padding-top: 24px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 13px; color: #9ca3af;
+    }
+    a { color: #2563eb; }
+    code {
+      font-size: 13px; background: #f3f4f6;
+      padding: 1px 6px; border-radius: 4px;
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="logo">chicken<span>Scratch</span></div>
+  <div class="badge">Biometric Data Privacy Policy</div>
+
+  <h1>Privacy Policy</h1>
+  <p class="subtitle">Governing the collection and use of biometric identifiers</p>
+
+  <div class="effective">
+    <strong>Policy version 1.0</strong> &nbsp;·&nbsp;
+    Effective date: April 14, 2026 &nbsp;·&nbsp;
+    Last updated: April 14, 2026
+  </div>
+
+  <!-- ─── 1. Introduction ─────────────────────────────────────── -->
+  <h2>1. Introduction</h2>
+  <p>
+    chickenScratch ("<strong>we</strong>", "<strong>our</strong>", "<strong>the Service</strong>") provides
+    handwriting-based biometric authentication to businesses ("Customers") whose end users
+    ("Users") enroll and verify their identity through our SDK or API.
+  </p>
+  <p>
+    Because we collect, store, and process biometric identifiers, this policy describes in
+    plain language exactly what we collect, how we protect it, how long we keep it, and
+    what rights you have over it. We take these obligations seriously.
+  </p>
+
+  <!-- ─── 2. What Is Biometric Data ──────────────────────────── -->
+  <h2>2. What Is Biometric Data?</h2>
+  <p>
+    Biometric data is information derived from a person's unique physical or behavioral
+    characteristics. The following biometric identifiers and information are collected by
+    chickenScratch:
+  </p>
+  <table>
+    <tr>
+      <th>Data type</th>
+      <th>Description</th>
+      <th>Purpose</th>
+    </tr>
+    <tr>
+      <td><strong>Handwriting strokes</strong></td>
+      <td>Raw pen/touch stroke trajectories (X/Y coordinates, timestamps) captured while signing your name</td>
+      <td>Identity enrollment &amp; verification</td>
+    </tr>
+    <tr>
+      <td><strong>Drawing strokes</strong></td>
+      <td>Stroke trajectories captured while drawing standard shapes (circle, square, triangle, house, smiley face)</td>
+      <td>Multi-factor biometric verification</td>
+    </tr>
+    <tr>
+      <td><strong>Pressure data</strong></td>
+      <td>Stylus/touch pressure readings during drawing, where the device supports it</td>
+      <td>Liveness &amp; forgery detection</td>
+    </tr>
+    <tr>
+      <td><strong>Timing features</strong></td>
+      <td>Inter-stroke pauses, drawing rhythm, stroke duration patterns</td>
+      <td>Behavioral biometric scoring</td>
+    </tr>
+    <tr>
+      <td><strong>Geometric features</strong></td>
+      <td>Derived mathematical features: curvature, direction changes, spatial efficiency</td>
+      <td>Identity scoring</td>
+    </tr>
+    <tr>
+      <td><strong>Device fingerprint</strong></td>
+      <td>Non-identifying device signals: screen resolution, GPU renderer, timezone, language. No cookies, no IP stored permanently.</td>
+      <td>Replay-attack detection</td>
+    </tr>
+  </table>
+
+  <div class="highlight">
+    <strong>What we do NOT collect:</strong> we do not collect facial images, voice recordings,
+    fingerprints, retina scans, DNA, or any biometric data beyond handwriting and drawing
+    behavior described above.
+  </div>
+
+  <!-- ─── 3. How We Collect It ───────────────────────────────── -->
+  <h2>3. How We Collect Biometric Data</h2>
+  <p>
+    Biometric data is collected through the chickenScratch JavaScript SDK or API, which
+    is embedded in a Customer's application. Collection happens:
+  </p>
+  <ul>
+    <li><strong>During enrollment:</strong> you draw your signature 3 times and draw 5 standard shapes. These samples are used to build your unique biometric baseline.</li>
+    <li><strong>During verification:</strong> you draw your signature once and the 5 shapes in a randomized order. The attempt is compared to your baseline.</li>
+  </ul>
+  <p>
+    No biometric data is collected passively or in the background. Collection only occurs
+    when you explicitly interact with the drawing canvas.
+  </p>
+
+  <!-- ─── 4. Explicit Consent ────────────────────────────────── -->
+  <h2>4. Explicit Consent</h2>
+  <p>
+    We collect biometric data only with your <strong>explicit, informed, written consent</strong>.
+    Before any data is collected, you will be presented with a consent notice that explains:
+  </p>
+  <ul>
+    <li>What biometric data will be collected</li>
+    <li>The specific purpose (authentication only)</li>
+    <li>A link to this full privacy policy</li>
+    <li>The right to decline or withdraw consent at any time</li>
+  </ul>
+  <p>
+    Your consent is recorded with a timestamp, your IP address, and the policy version you
+    agreed to. You may withdraw consent at any time — see Section 8 for details.
+  </p>
+
+  <!-- ─── 5. How We Use Biometric Data ──────────────────────── -->
+  <h2>5. How We Use Biometric Data</h2>
+  <p>We use biometric data for <strong>one purpose only</strong>: to verify that the person
+  attempting to authenticate is the same person who enrolled.</p>
+  <p>We <strong>do not</strong>:</p>
+  <ul>
+    <li>Sell biometric data to any third party</li>
+    <li>Share biometric data with advertising networks or data brokers</li>
+    <li>Use biometric data to train general machine learning models</li>
+    <li>Transfer biometric data across international borders without appropriate safeguards</li>
+    <li>Use biometric data for any purpose beyond authentication for the specific Customer application where you enrolled</li>
+  </ul>
+
+  <!-- ─── 6. Security ─────────────────────────────────────────── -->
+  <h2>6. Security Measures</h2>
+  <p>We implement the following technical safeguards:</p>
+  <ul>
+    <li><strong>Encryption at rest:</strong> all biometric feature data is encrypted using AES-256-GCM with a unique IV per record before being written to the database.</li>
+    <li><strong>Encryption in transit:</strong> all data is transmitted over HTTPS (TLS 1.2+). Plain HTTP connections are rejected.</li>
+    <li><strong>Access control:</strong> biometric data is partitioned by tenant. Customer A cannot access Customer B's user data, and vice versa.</li>
+    <li><strong>Score leakage lockdown:</strong> the API returns only pass/fail. Raw scores and biometric features are never returned to clients.</li>
+    <li><strong>Replay protection:</strong> every verification challenge uses a one-time token with a 5-minute expiry and randomized drawing order.</li>
+    <li><strong>No plaintext storage:</strong> raw stroke data is encrypted immediately upon receipt.</li>
+  </ul>
+
+  <!-- ─── 7. Retention ────────────────────────────────────────── -->
+  <h2>7. Data Retention</h2>
+  <table>
+    <tr>
+      <th>Data</th>
+      <th>Retention period</th>
+    </tr>
+    <tr>
+      <td>Biometric enrollment samples &amp; baselines</td>
+      <td>Until the User requests deletion, the Customer terminates their account, or 3 years of inactivity — whichever comes first</td>
+    </tr>
+    <tr>
+      <td>Verification attempt records</td>
+      <td>90 days (used for fraud detection and security auditing), then anonymized</td>
+    </tr>
+    <tr>
+      <td>Consent records</td>
+      <td>7 years (legal requirement for demonstrating compliance)</td>
+    </tr>
+    <tr>
+      <td>Device fingerprint signals</td>
+      <td>Stored alongside the attempt record — same 90-day retention</td>
+    </tr>
+  </table>
+  <p>
+    Upon deletion, all biometric identifiers and derived features are permanently and
+    irreversibly destroyed. Anonymized aggregate statistics (e.g., "10,000 authentications
+    processed this month") may be retained indefinitely.
+  </p>
+
+  <!-- ─── 8. Your Rights ──────────────────────────────────────── -->
+  <h2>8. Your Rights</h2>
+  <h3>Illinois BIPA (Biometric Information Privacy Act)</h3>
+  <p>If you are an Illinois resident, you have the right to:</p>
+  <ul>
+    <li>Be informed before biometric data is collected (fulfilled by this policy and the consent step)</li>
+    <li>Know the specific purpose and length of storage</li>
+    <li>Have your biometric data destroyed upon request or upon the earlier of: fulfillment of the initial purpose, or within 3 years of your last interaction</li>
+    <li>Not have your biometric data sold or disclosed without consent</li>
+    <li>Sue for damages if your rights under BIPA are violated</li>
+  </ul>
+
+  <h3>Texas CUBI (Capture or Use of Biometric Identifier Act)</h3>
+  <p>
+    If you are a Texas resident, we comply with the Texas CUBI statute by: obtaining
+    informed consent before collection, using data only for the stated purpose, storing
+    data securely, and destroying data within a reasonable time after the purpose is
+    fulfilled or within 1 year of your last interaction.
+  </p>
+
+  <h3>GDPR (EU/UK residents)</h3>
+  <p>
+    Biometric data is "special category" data under GDPR Article 9. Our lawful basis for
+    processing is <strong>explicit consent</strong> (Article 9(2)(a)). You have the right to:
+  </p>
+  <ul>
+    <li><strong>Access:</strong> request a copy of your biometric data and processing records</li>
+    <li><strong>Rectification:</strong> correct inaccurate data</li>
+    <li><strong>Erasure ("right to be forgotten"):</strong> request permanent deletion of all biometric data</li>
+    <li><strong>Restriction:</strong> restrict processing while a complaint is investigated</li>
+    <li><strong>Portability:</strong> receive your data in a machine-readable format</li>
+    <li><strong>Objection:</strong> object to processing at any time — we will stop immediately</li>
+    <li><strong>Withdraw consent:</strong> withdraw consent at any time without affecting the lawfulness of prior processing</li>
+  </ul>
+
+  <h3>How to exercise your rights</h3>
+  <p>
+    Contact the Customer whose application you enrolled in — they are the data controller
+    responsible for your data. Alternatively, contact chickenScratch directly at the address
+    in Section 10. We will respond within 30 days. Deletion requests are fulfilled within 72 hours.
+  </p>
+
+  <!-- ─── 9. Third Parties ─────────────────────────────────────── -->
+  <h2>9. Third-Party Disclosure</h2>
+  <p>We do not sell, lease, trade, or otherwise disclose biometric data to third parties, except:</p>
+  <ul>
+    <li><strong>Infrastructure providers:</strong> our database host (Railway) processes data on our behalf under a Data Processing Agreement. They are prohibited from accessing or using your data for any purpose other than providing infrastructure services.</li>
+    <li><strong>Legal requirement:</strong> if required by a valid court order or applicable law, we will notify the affected Customer before disclosure where permitted by law.</li>
+  </ul>
+  <p>
+    No advertising networks, analytics companies, or data brokers ever receive biometric data.
+  </p>
+
+  <!-- ─── 10. Contact ──────────────────────────────────────────── -->
+  <h2>10. Contact &amp; Data Protection</h2>
+  <div class="contact-box">
+    <p><strong>chickenScratch</strong></p>
+    <p>Privacy and Data Protection inquiries:</p>
+    <p>Email: <a href="mailto:privacy@chickenscratch.io">privacy@chickenscratch.io</a></p>
+    <p>
+      For deletion requests, include your User ID (provided by the application you enrolled in)
+      and the name of the Customer application. We will confirm deletion within 72 hours.
+    </p>
+  </div>
+
+  <!-- ─── 11. Policy Updates ───────────────────────────────────── -->
+  <h2>11. Policy Updates &amp; Versioning</h2>
+  <p>
+    This policy is versioned. The current version is <code>1.0</code>.
+    When we make material changes, we will:
+  </p>
+  <ul>
+    <li>Increment the version number</li>
+    <li>Notify Customers at least 30 days before the new version takes effect</li>
+    <li>Require re-consent from Users before collecting further data under the new policy</li>
+  </ul>
+  <p>
+    Prior versions of this policy remain available at
+    <code>/privacy?version=X.X</code>.
+    Your consent records always reference the exact policy version you agreed to.
+  </p>
+
+  <footer>
+    chickenScratch &nbsp;·&nbsp;
+    Policy version 1.0 &nbsp;·&nbsp;
+    Effective April 14, 2026 &nbsp;·&nbsp;
+    <a href="mailto:privacy@chickenscratch.io">privacy@chickenscratch.io</a>
+  </footer>
+
+</div>
+</body>
+</html>

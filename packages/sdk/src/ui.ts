@@ -198,6 +198,72 @@ export class UIRenderer {
     `;
   }
 
+  /**
+   * Show the consent step as the first panel before enrollment begins.
+   * Blocks until the user agrees or declines.
+   */
+  showConsent(privacyPolicyUrl: string): Promise<boolean> {
+    return new Promise(resolve => {
+      this.canvasContainer.style.display = 'none';
+      this.buttonRow.style.display = 'none';
+      this.resultPanel.style.display = 'block';
+
+      this.instruction.textContent = 'Consent Required';
+      this.progress.textContent = '';
+
+      this.resultPanel.innerHTML = `
+        <div style="text-align:left;padding:4px 0;">
+          <p style="font-size:14px;color:${this.theme.textColor};margin:0 0 12px;line-height:1.5;">
+            To verify your identity, <strong>chickenScratch</strong> will collect and store
+            biometric identifiers including your handwriting signature and drawings.
+          </p>
+          <p style="font-size:14px;color:${this.theme.textColor};margin:0 0 12px;line-height:1.5;">
+            This data is encrypted at rest, used only for authentication, and never sold
+            or shared with third parties. You may request deletion at any time.
+          </p>
+          <p style="font-size:13px;color:#666;margin:0 0 16px;line-height:1.5;">
+            By clicking <strong>I Agree</strong>, you provide explicit written consent as
+            required under BIPA, GDPR, and applicable biometric privacy laws.
+            <a href="${privacyPolicyUrl}" target="_blank"
+               style="color:${this.theme.primaryColor};text-decoration:underline;">
+              Read the full privacy policy →
+            </a>
+          </p>
+          <div style="display:flex;gap:8px;">
+            <button id="cs-decline" style="
+              flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;
+              background:white;cursor:pointer;font-size:14px;
+              font-family:${this.theme.fontFamily};
+            ">Decline</button>
+            <button id="cs-agree" style="
+              flex:2;padding:10px;border:none;border-radius:6px;
+              background:${this.theme.primaryColor};color:white;
+              cursor:pointer;font-size:14px;font-weight:600;
+              font-family:${this.theme.fontFamily};
+            ">I Agree</button>
+          </div>
+        </div>
+      `;
+
+      this.resultPanel.querySelector('#cs-agree')?.addEventListener('click', () => {
+        this.resultPanel.style.display = 'none';
+        resolve(true);
+      });
+      this.resultPanel.querySelector('#cs-decline')?.addEventListener('click', () => {
+        this.resultPanel.innerHTML = `
+          <div style="text-align:center;padding:16px 0;">
+            <div style="font-size:32px;margin-bottom:8px;">✗</div>
+            <div style="font-size:15px;font-weight:600;color:${this.theme.failColor};">Consent Declined</div>
+            <div style="font-size:13px;color:#666;margin-top:8px;">
+              Enrollment requires consent to collect biometric data.
+            </div>
+          </div>
+        `;
+        resolve(false);
+      });
+    });
+  }
+
   destroy() {
     this.root.innerHTML = '';
   }

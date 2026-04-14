@@ -3,6 +3,18 @@ export interface ChickenScratchOptions {
   baseUrl: string;
   container: string | HTMLElement;
   theme?: Partial<Theme>;
+  /**
+   * Skip the consent step in the enrollment flow.
+   * Use this only if your app handles consent independently and
+   * calls POST /api/v1/consent before initiating enrollment.
+   * Default: false (consent step is shown).
+   */
+  skipConsent?: boolean;
+  /**
+   * Override the privacy policy URL shown in the consent step.
+   * Defaults to the chickenScratch hosted policy.
+   */
+  privacyPolicyUrl?: string;
   onStepChange?: (step: StepInfo) => void;
   onComplete?: (result: AuthResult) => void;
   onError?: (error: Error) => void;

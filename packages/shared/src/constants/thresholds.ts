@@ -1,3 +1,9 @@
+/** The current version of the chickenScratch biometric data privacy policy. */
+export const CURRENT_POLICY_VERSION = '1.0' as const;
+
+/** URL where the full privacy policy is hosted. */
+export const PRIVACY_POLICY_URL = 'https://chicken-scratch-production.up.railway.app/privacy' as const;
+
 export const THRESHOLDS = {
   // Authentication
   AUTH_SCORE_DEFAULT: 85,

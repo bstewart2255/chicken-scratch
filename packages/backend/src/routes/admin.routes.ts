@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
+import * as consentRepo from '../db/repositories/consent.repo.js';
 
 const router = Router();
 
@@ -90,6 +91,29 @@ router.post('/api/admin/tenants/:id/rotate-key', async (req, res, next) => {
       apiKey: newKey,
       message: 'API key rotated. Save the new key — it will not be shown again.',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List consent records for a tenant
+router.get('/api/admin/tenants/:id/consents', async (req, res, next) => {
+  try {
+    const tenant = await tenantRepo.findById(req.params.id);
+    if (!tenant) {
+      res.status(404).json({ success: false, error: 'Tenant not found.' });
+      return;
+    }
+
+    const consents = await consentRepo.listTenantConsents(tenant.id);
+    res.json(consents.map(c => ({
+      id: c.id,
+      externalUserId: c.external_user_id,
+      policyVersion: c.policy_version,
+      consentedAt: c.consented_at,
+      withdrawnAt: c.withdrawn_at,
+      active: c.withdrawn_at === null,
+    })));
   } catch (err) {
     next(err);
   }

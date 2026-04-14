@@ -69,7 +69,7 @@ export type {
 } from './types/diagnostics.js';
 
 // Constants
-export { THRESHOLDS } from './constants/thresholds.js';
+export { THRESHOLDS, CURRENT_POLICY_VERSION, PRIVACY_POLICY_URL } from './constants/thresholds.js';
 
 // Validation
 export {

@@ -4,6 +4,9 @@ import { DrawingCanvas } from './canvas.js';
 import { UIRenderer, SHAPE_LABELS } from './ui.js';
 import { detectCapabilities } from './device.js';
 
+const CURRENT_POLICY_VERSION = '1.0';
+const DEFAULT_PRIVACY_URL = 'https://chicken-scratch-production.up.railway.app/privacy';
+
 export class ChickenScratch {
   private api: ApiClient;
   private container: HTMLElement;
@@ -36,6 +39,21 @@ export class ChickenScratch {
       const status = await this.api.getEnrollmentStatus(externalUserId);
       if (status.enrolled) {
         return { success: true, enrolled: true, message: 'User is already enrolled.' };
+      }
+
+      // Consent step (shown before any biometric data is collected)
+      if (!this.options.skipConsent) {
+        const consentStatus = await this.api.getConsentStatus(externalUserId);
+        if (!consentStatus.hasConsented) {
+          const privacyUrl = this.options.privacyPolicyUrl ?? DEFAULT_PRIVACY_URL;
+          const ui = new UIRenderer(this.container, this.options.theme);
+          const agreed = await ui.showConsent(privacyUrl);
+          if (!agreed) {
+            return { success: false, enrolled: false, message: 'Enrollment requires consent to biometric data collection.' };
+          }
+          // Record consent on the backend
+          await this.api.recordConsent(externalUserId, CURRENT_POLICY_VERSION);
+        }
       }
 
       const sigSamplesNeeded = status.samplesRequired - status.samplesCollected;
