@@ -1,0 +1,30 @@
+{
+  "name": "@chicken-scratch/sdk",
+  "version": "0.1.0",
+  "description": "Drop-in JavaScript SDK for chickenScratch biometric authentication",
+  "type": "module",
+  "main": "./dist/chicken-scratch.js",
+  "module": "./dist/chicken-scratch.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/chicken-scratch.mjs",
+      "require": "./dist/chicken-scratch.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "signature_pad": "^4.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0"
+  }
+}

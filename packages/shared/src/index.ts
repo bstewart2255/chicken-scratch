@@ -1,0 +1,81 @@
+// Types
+export type {
+  StrokePoint,
+  Stroke,
+  CanvasSize,
+  RawSignatureData,
+  DeviceCapabilities,
+  DeviceFingerprint,
+} from './types/stroke.js';
+
+export type {
+  PressureFeatures,
+  TimingFeatures,
+  GeometricFeatures,
+  SecurityFeatures,
+  AllFeatures,
+  MLFeatureVector,
+  FeatureComparison,
+} from './types/features.js';
+
+export type {
+  EnrollmentRequest,
+  EnrollmentResponse,
+  EnrollmentStatusResponse,
+  VerifyRequest,
+  VerifyResponse,
+} from './types/auth.js';
+
+export type {
+  ShapeType,
+  DrawingType,
+  ChallengeItemType,
+  CircleFeatures,
+  SquareFeatures,
+  TriangleFeatures,
+  HouseFeatures,
+  SmileyFeatures,
+  ShapeSpecificFeatures,
+  ShapeEnrollmentRequest,
+  ShapeData,
+  FullVerifyRequest,
+  ShapeScoreBreakdown,
+  FullVerifyResponse,
+} from './types/shape.js';
+export { SHAPE_TYPES, DRAWING_TYPES, ALL_CHALLENGE_TYPES, isDrawingType } from './types/shape.js';
+
+export type {
+  SessionType,
+  SessionStatus,
+  Session,
+  CreateSessionRequest,
+  CreateSessionResponse,
+  ChallengeResponse,
+} from './types/session.js';
+
+export type {
+  StepDuration,
+  DiagnosticsAttempt,
+  ShapeAttemptDetail,
+  UserStats,
+  DiagnosticsUser,
+  BaselineSummary,
+  FingerprintMatchResult,
+  FingerprintSignalInfo,
+  ForgeryLevel,
+  ForgeryTrialResult,
+  ForgeryLevelResult,
+  ForgerySimulationResult,
+} from './types/diagnostics.js';
+
+// Constants
+export { THRESHOLDS } from './constants/thresholds.js';
+
+// Validation
+export {
+  EnrollmentRequestSchema,
+  VerifyRequestSchema,
+  ShapeEnrollmentRequestSchema,
+  FullVerifyRequestSchema,
+  CreateSessionRequestSchema,
+} from './validation/schemas.js';

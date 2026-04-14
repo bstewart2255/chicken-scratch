@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>chickenScratch SDK Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 16px; }
+    .controls { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+    .controls input { padding: 8px 12px; border: 2px solid #ccc; border-radius: 6px; font-size: 14px; flex: 1; }
+    .controls button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; color: white; }
+    .controls button.enroll { background: #1a1a2e; }
+    .controls button.verify { background: #2563eb; }
+    #sdk-container { width: 100%; height: 400px; margin-bottom: 16px; }
+    #log { background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+    .setup { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; }
+    .setup code { background: #fef3c7; padding: 2px 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>chickenScratch SDK Test</h1>
+
+  <div class="setup" id="setup-info">
+    Loading API key...
+  </div>
+
+  <div class="controls">
+    <input type="text" id="userId" placeholder="External User ID (e.g. user-123)" value="sdk-test-1" />
+    <button class="enroll" onclick="startEnroll()">Enroll</button>
+    <button class="verify" onclick="startVerify()">Verify</button>
+  </div>
+
+  <div id="sdk-container"></div>
+  <div id="log"></div>
+
+  <script src="./dist/chicken-scratch.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    let apiKey = null;
+
+    // Fetch or create a test tenant
+    async function setup() {
+      const setupEl = document.getElementById('setup-info');
+      try {
+        // Check for existing tenants
+        const res = await fetch('/api/admin/tenants');
+        const tenants = await res.json();
+        const active = tenants.find(t => t.active);
+
+        if (active) {
+          setupEl.innerHTML = `Using tenant: <strong>${active.name}</strong> (${active.apiKeyPrefix}). Enter the full API key below if this is a new session.`;
+          // Try to load from localStorage
+          apiKey = localStorage.getItem('cs_test_api_key');
+          if (apiKey) {
+            setupEl.innerHTML += `<br>API key loaded from localStorage.`;
+            log('API key loaded from localStorage');
+          } else {
+            setupEl.innerHTML += `<br><input id="apiKeyInput" placeholder="Paste API key" style="width:100%;margin-top:8px;padding:6px;font-size:12px;font-family:monospace;" />
+              <button onclick="saveKey()" style="margin-top:4px;padding:4px 12px;font-size:12px;">Save Key</button>`;
+          }
+        } else {
+          // Create a test tenant
+          const createRes = await fetch('/api/admin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'SDK Test Tenant' }),
+          });
+          const data = await createRes.json();
+          apiKey = data.tenant.apiKey;
+          localStorage.setItem('cs_test_api_key', apiKey);
+          setupEl.innerHTML = `Created tenant: <strong>${data.tenant.name}</strong><br>API key saved to localStorage.`;
+          log(`Tenant created: ${data.tenant.name}`);
+          log(`API key: ${apiKey.substring(0, 15)}...`);
+        }
+      } catch (err) {
+        setupEl.innerHTML = `Error: ${err.message}. Is the backend running?`;
+      }
+    }
+
+    function saveKey() {
+      const input = document.getElementById('apiKeyInput');
+      if (input && input.value.startsWith('cs_')) {
+        apiKey = input.value;
+        localStorage.setItem('cs_test_api_key', apiKey);
+        log('API key saved');
+        input.parentElement.innerHTML = 'API key saved!';
+      }
+    }
+
+    function getSDK() {
+      if (!apiKey) {
+        alert('No API key set. Create a tenant first or paste the key.');
+        return null;
+      }
+      return new ChickenScratch({
+        apiKey,
+        baseUrl: window.location.origin,
+        container: '#sdk-container',
+        onStepChange: (step) => log(`Step: ${step.label} (${step.current}/${step.total})`),
+        onComplete: (result) => log(`Complete: ${JSON.stringify(result)}`),
+        onError: (err) => log(`Error: ${err.message}`),
+      });
+    }
+
+    async function startEnroll() {
+      const sdk = getSDK();
+      if (!sdk) return;
+      const userId = document.getElementById('userId').value;
+      log(`Starting enrollment for: ${userId}`);
+      const result = await sdk.enroll(userId);
+      log(`Enrollment result: ${JSON.stringify(result)}`);
+    }
+
+    async function startVerify() {
+      const sdk = getSDK();
+      if (!sdk) return;
+      const userId = document.getElementById('userId').value;
+      log(`Starting verification for: ${userId}`);
+      const result = await sdk.verify(userId);
+      log(`Verification result: ${JSON.stringify(result)}`);
+    }
+
+    setup();
+  </script>
+</body>
+</html>
