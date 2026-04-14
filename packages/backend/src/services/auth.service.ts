@@ -15,11 +15,11 @@ import * as authAttemptRepo from '../db/repositories/auth-attempt.repo.js';
 import * as sessionService from './session.service.js';
 import type { ShapeSpecificFeatures } from '@chicken-scratch/shared';
 
-export function verifySignature(
+export async function verifySignature(
   username: string,
   signatureData: RawSignatureData,
-): VerifyResponse {
-  const user = userRepo.findByUsername(username);
+): Promise<VerifyResponse> {
+  const user = await userRepo.findByUsername(username);
   if (!user) {
     return {
       success: false,
@@ -42,7 +42,7 @@ export function verifySignature(
     };
   }
 
-  const baseline = sigRepo.getBaseline(user.id);
+  const baseline = await sigRepo.getBaseline(user.id);
   if (!baseline) {
     return {
       success: false,
@@ -54,17 +54,14 @@ export function verifySignature(
     };
   }
 
-  // Extract features from the attempt
   const attemptFeatures = extractAllFeatures(signatureData);
   const baselineFeatures = JSON.parse(baseline.avg_features) as AllFeatures;
 
-  // Compare
   const comparison = compareFeatures(baselineFeatures, attemptFeatures);
   const threshold = THRESHOLDS.AUTH_SCORE_DEFAULT;
   const authenticated = comparison.score >= threshold;
 
-  // Log the attempt with full diagnostic data
-  authAttemptRepo.createAttempt(
+  await authAttemptRepo.createAttempt(
     user.id,
     comparison.score,
     threshold,
@@ -90,13 +87,13 @@ export function verifySignature(
   };
 }
 
-export function verifyFull(
+export async function verifyFull(
   username: string,
   signatureData: RawSignatureData,
   shapes: ShapeData[],
   challengeId: string,
   timing?: { durationMs?: number; stepDurations?: { step: string; durationMs: number }[] },
-): FullVerifyResponse {
+): Promise<FullVerifyResponse> {
   const threshold = THRESHOLDS.AUTH_SCORE_DEFAULT;
   const errorResponse = (msg: string): FullVerifyResponse => ({
     success: false,
@@ -108,28 +105,27 @@ export function verifyFull(
     message: msg,
   });
 
-  // Validate challenge and shape order (one-time token — rejects replayed challenge IDs)
+  // Validate challenge and shape order
   const submittedOrder = shapes.map(s => s.shapeType);
-  const orderError = sessionService.validateShapeOrder(challengeId, submittedOrder);
+  const orderError = await sessionService.validateShapeOrder(challengeId, submittedOrder);
   if (orderError) return errorResponse(orderError);
 
-  // Timestamp freshness — reject stale stroke data
-  const maxAge = THRESHOLDS.SESSION_TTL_MS; // same as session TTL (5 min)
+  // Timestamp freshness check
+  const maxAge = THRESHOLDS.SESSION_TTL_MS;
   const now = Date.now();
   const allCapturedAt = [signatureData.capturedAt, ...shapes.map(s => s.signatureData.capturedAt)];
   for (const ts of allCapturedAt) {
     const age = now - new Date(ts).getTime();
-    if (age > maxAge || age < -60_000) { // allow 60s clock skew into the future
+    if (age > maxAge || age < -60_000) {
       return errorResponse('Submission data is too old or has an invalid timestamp.');
     }
   }
 
-  const user = userRepo.findByUsername(username);
+  const user = await userRepo.findByUsername(username);
   if (!user) return errorResponse('User not found.');
   if (!user.enrolled) return errorResponse('User has not completed enrollment.');
 
-  // Signature scoring
-  const sigBaseline = sigRepo.getBaseline(user.id);
+  const sigBaseline = await sigRepo.getBaseline(user.id);
   if (!sigBaseline) return errorResponse('No signature baseline found.');
 
   const attemptSigFeatures = extractAllFeatures(signatureData);
@@ -137,13 +133,12 @@ export function verifyFull(
   const sigComparison = compareFeatures(baselineSigFeatures, attemptSigFeatures);
   const signatureScore = sigComparison.score;
 
-  // Shape + drawing scoring with detailed diagnostics
   const shapeScores: ShapeScoreBreakdown[] = [];
   const shapeDetails: ShapeAttemptDetail[] = [];
 
   for (const shape of shapes) {
     const itemType = shape.shapeType as ChallengeItemType;
-    const shapeBaseline = shapeRepo.getShapeBaseline(user.id, itemType);
+    const shapeBaseline = await shapeRepo.getShapeBaseline(user.id, itemType);
     if (!shapeBaseline) {
       return errorResponse(`No baseline found for '${shape.shapeType}'.`);
     }
@@ -179,12 +174,11 @@ export function verifyFull(
     });
   }
 
-  // Combined scoring
   const { finalScore, authenticated } = computeCombinedScore(signatureScore, shapeScores, threshold);
 
-  // Compare device fingerprints (enrollment vs verification)
+  // Compare device fingerprints
   let fingerprintMatch: Record<string, unknown> | undefined;
-  const enrollmentSamples = sigRepo.getSamples(user.id);
+  const enrollmentSamples = await sigRepo.getSamples(user.id);
   if (enrollmentSamples.length > 0 && signatureData.deviceCapabilities.fingerprint) {
     const enrollDeviceCaps = JSON.parse(enrollmentSamples[0].device_capabilities);
     if (enrollDeviceCaps.fingerprint) {
@@ -196,13 +190,12 @@ export function verifyFull(
     }
   }
 
-  // Log attempt with full diagnostic data
-  authAttemptRepo.createAttempt(
+  await authAttemptRepo.createAttempt(
     user.id,
     finalScore,
     threshold,
     authenticated,
-    sigComparison, // Store the actual signature comparison, not a dummy
+    sigComparison,
     signatureData.deviceCapabilities,
     {
       attemptType: 'full',

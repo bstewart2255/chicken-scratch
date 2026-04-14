@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { query } from '../connection.js';
 import { encryptJson, decrypt } from '../../utils/crypto.js';
 import type { AllFeatures, MLFeatureVector, RawSignatureData, DeviceCapabilities } from '@chicken-scratch/shared';
 
@@ -20,34 +20,9 @@ export interface BaselineRow {
   avg_features: string;
   avg_ml_features: string;
   feature_std_devs: string;
-  has_pressure_data: number;
+  has_pressure_data: boolean;
   created_at: string;
   updated_at: string;
-}
-
-export function createSample(
-  userId: string,
-  sampleNumber: number,
-  strokeData: RawSignatureData,
-  features: AllFeatures,
-  mlFeatures: MLFeatureVector,
-  deviceCapabilities: DeviceCapabilities,
-): EnrollmentSampleRow {
-  const db = getDb();
-  const id = uuid();
-  db.prepare(`
-    INSERT INTO enrollment_samples (id, user_id, sample_number, stroke_data, features, ml_features, device_capabilities)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    userId,
-    sampleNumber,
-    encryptJson(strokeData),
-    encryptJson(features),
-    encryptJson(mlFeatures),
-    JSON.stringify(deviceCapabilities), // not biometric — no encryption needed
-  );
-  return db.prepare('SELECT * FROM enrollment_samples WHERE id = ?').get(id) as EnrollmentSampleRow;
 }
 
 function decryptSampleRow(row: EnrollmentSampleRow): EnrollmentSampleRow {
@@ -68,51 +43,81 @@ function decryptBaselineRow(row: BaselineRow): BaselineRow {
   };
 }
 
-export function getSampleCount(userId: string): number {
-  const db = getDb();
-  const row = db.prepare('SELECT COUNT(*) as count FROM enrollment_samples WHERE user_id = ?').get(userId) as { count: number };
-  return row.count;
+export async function createSample(
+  userId: string,
+  sampleNumber: number,
+  strokeData: RawSignatureData,
+  features: AllFeatures,
+  mlFeatures: MLFeatureVector,
+  deviceCapabilities: DeviceCapabilities,
+): Promise<EnrollmentSampleRow> {
+  const id = uuid();
+  const result = await query<EnrollmentSampleRow>(`
+    INSERT INTO enrollment_samples (id, user_id, sample_number, stroke_data, features, ml_features, device_capabilities)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *
+  `, [
+    id,
+    userId,
+    sampleNumber,
+    encryptJson(strokeData),
+    encryptJson(features),
+    encryptJson(mlFeatures),
+    JSON.stringify(deviceCapabilities),
+  ]);
+  return result.rows[0];
 }
 
-export function getSamples(userId: string): EnrollmentSampleRow[] {
-  const db = getDb();
-  const rows = db.prepare(
-    'SELECT * FROM enrollment_samples WHERE user_id = ? ORDER BY sample_number'
-  ).all(userId) as EnrollmentSampleRow[];
-  return rows.map(decryptSampleRow);
+export async function getSampleCount(userId: string): Promise<number> {
+  const result = await query<{ count: string }>(
+    'SELECT COUNT(*) as count FROM enrollment_samples WHERE user_id = $1',
+    [userId],
+  );
+  return parseInt(result.rows[0].count, 10);
 }
 
-export function upsertBaseline(
+export async function getSamples(userId: string): Promise<EnrollmentSampleRow[]> {
+  const result = await query<EnrollmentSampleRow>(
+    'SELECT * FROM enrollment_samples WHERE user_id = $1 ORDER BY sample_number',
+    [userId],
+  );
+  return result.rows.map(decryptSampleRow);
+}
+
+export async function upsertBaseline(
   userId: string,
   avgFeatures: AllFeatures,
   avgMlFeatures: MLFeatureVector,
   featureStdDevs: Record<string, number>,
   hasPressureData: boolean,
-): BaselineRow {
-  const db = getDb();
+): Promise<BaselineRow> {
   const id = uuid();
-  db.prepare(`
+  const result = await query<BaselineRow>(`
     INSERT INTO baselines (id, user_id, avg_features, avg_ml_features, feature_std_devs, has_pressure_data)
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT(user_id) DO UPDATE SET
-      avg_features = excluded.avg_features,
-      avg_ml_features = excluded.avg_ml_features,
-      feature_std_devs = excluded.feature_std_devs,
-      has_pressure_data = excluded.has_pressure_data,
-      updated_at = datetime('now')
-  `).run(
+      avg_features = EXCLUDED.avg_features,
+      avg_ml_features = EXCLUDED.avg_ml_features,
+      feature_std_devs = EXCLUDED.feature_std_devs,
+      has_pressure_data = EXCLUDED.has_pressure_data,
+      updated_at = NOW()
+    RETURNING *
+  `, [
     id,
     userId,
     encryptJson(avgFeatures),
     encryptJson(avgMlFeatures),
     encryptJson(featureStdDevs),
-    hasPressureData ? 1 : 0,
-  );
-  return db.prepare('SELECT * FROM baselines WHERE user_id = ?').get(userId) as BaselineRow;
+    hasPressureData,
+  ]);
+  return result.rows[0];
 }
 
-export function getBaseline(userId: string): BaselineRow | undefined {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM baselines WHERE user_id = ?').get(userId) as BaselineRow | undefined;
+export async function getBaseline(userId: string): Promise<BaselineRow | undefined> {
+  const result = await query<BaselineRow>(
+    'SELECT * FROM baselines WHERE user_id = $1',
+    [userId],
+  );
+  const row = result.rows[0];
   return row ? decryptBaselineRow(row) : undefined;
 }

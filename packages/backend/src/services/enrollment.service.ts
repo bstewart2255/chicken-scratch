@@ -93,22 +93,18 @@ function averageMLFeatures(mlSets: MLFeatureVector[]): MLFeatureVector {
  */
 function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   const devs: Record<string, number> = {};
-  // Timing features
   const timingKeys = Object.keys(featureSets[0].timing) as (keyof AllFeatures['timing'])[];
   for (const key of timingKeys) {
     devs[`timing.${key}`] = stddev(featureSets.map(f => f.timing[key]));
   }
-  // Geometric features
   const geoKeys = Object.keys(featureSets[0].geometric) as (keyof AllFeatures['geometric'])[];
   for (const key of geoKeys) {
     devs[`geometric.${key}`] = stddev(featureSets.map(f => f.geometric[key]));
   }
-  // Security features
   const secKeys = Object.keys(featureSets[0].security) as (keyof AllFeatures['security'])[];
   for (const key of secKeys) {
     devs[`security.${key}`] = stddev(featureSets.map(f => f.security[key]));
   }
-  // Pressure features (if available)
   if (featureSets.every(f => f.pressure !== null)) {
     const pKeys = Object.keys(featureSets[0].pressure!) as (keyof NonNullable<AllFeatures['pressure']>)[];
     for (const key of pKeys) {
@@ -118,14 +114,14 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   return devs;
 }
 
-export function enrollSample(
+export async function enrollSample(
   username: string,
   signatureData: RawSignatureData,
-): EnrollmentResponse {
+): Promise<EnrollmentResponse> {
   // Find or create user
-  let user = userRepo.findByUsername(username);
+  let user = await userRepo.findByUsername(username);
   if (!user) {
-    user = userRepo.createUser(username);
+    user = await userRepo.createUser(username);
   }
 
   if (user.enrolled) {
@@ -139,7 +135,7 @@ export function enrollSample(
     };
   }
 
-  const currentCount = sigRepo.getSampleCount(user.id);
+  const currentCount = await sigRepo.getSampleCount(user.id);
   if (currentCount >= THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
     return {
       success: false,
@@ -157,7 +153,7 @@ export function enrollSample(
   const sampleNumber = currentCount + 1;
 
   // Store sample
-  sigRepo.createSample(
+  await sigRepo.createSample(
     user.id,
     sampleNumber,
     signatureData,
@@ -170,7 +166,7 @@ export function enrollSample(
 
   // If all samples collected, compute and store baseline
   if (sampleNumber === THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
-    const samples = sigRepo.getSamples(user.id);
+    const samples = await sigRepo.getSamples(user.id);
     const allFeatureSets = samples.map(s => JSON.parse(s.features) as AllFeatures);
     const allMLSets = samples.map(s => JSON.parse(s.ml_features) as MLFeatureVector);
 
@@ -178,7 +174,7 @@ export function enrollSample(
     const avgML = averageMLFeatures(allMLSets);
     const featureStdDevs = computeStdDevs(allFeatureSets);
 
-    sigRepo.upsertBaseline(
+    await sigRepo.upsertBaseline(
       user.id,
       avgFeatures,
       avgML,
@@ -186,7 +182,7 @@ export function enrollSample(
       avgFeatures.metadata.hasPressureData,
     );
 
-    userRepo.markEnrolled(user.id);
+    await userRepo.markEnrolled(user.id);
 
     return {
       success: true,
@@ -208,29 +204,26 @@ export function enrollSample(
   };
 }
 
-export function enrollShape(
+export async function enrollShape(
   username: string,
   shapeType: ChallengeItemType,
   signatureData: RawSignatureData,
-): { success: boolean; message: string } {
-  const user = userRepo.findByUsername(username);
+): Promise<{ success: boolean; message: string }> {
+  const user = await userRepo.findByUsername(username);
   if (!user) {
     return { success: false, message: 'User not found. Please enroll your signature first.' };
   }
 
-  // Signature enrollment must be complete before shapes/drawings
-  const sigCount = sigRepo.getSampleCount(user.id);
+  const sigCount = await sigRepo.getSampleCount(user.id);
   if (sigCount < THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
     return { success: false, message: 'Please complete signature enrollment first.' };
   }
 
-  // Extract biometric + shape-specific features
   const strokes = extractStrokes(signatureData);
   const biometricFeatures = extractAllFeatures(signatureData);
   const shapeFeatures = extractShapeSpecificFeatures(strokes, shapeType);
 
-  // Store sample (1 per type, upserts on conflict)
-  shapeRepo.createShapeSample(
+  await shapeRepo.createShapeSample(
     user.id,
     shapeType,
     signatureData,
@@ -239,16 +232,14 @@ export function enrollShape(
     signatureData.deviceCapabilities,
   );
 
-  // With 1 sample, baseline = the sample itself
-  shapeRepo.upsertShapeBaseline(user.id, shapeType, biometricFeatures, shapeFeatures);
+  await shapeRepo.upsertShapeBaseline(user.id, shapeType, biometricFeatures, shapeFeatures);
 
-  // Check if all shapes AND drawings are enrolled
-  const enrolledSamples = shapeRepo.getShapeSamples(user.id);
+  const enrolledSamples = await shapeRepo.getShapeSamples(user.id);
   const enrolledTypes = new Set(enrolledSamples.map(s => s.shape_type));
   const allDone = ALL_CHALLENGE_TYPES.every(t => enrolledTypes.has(t));
 
   if (allDone) {
-    userRepo.markEnrolled(user.id);
+    await userRepo.markEnrolled(user.id);
   }
 
   const typeLabel = isDrawingType(shapeType) ? 'Drawing' : 'Shape';
@@ -258,8 +249,8 @@ export function enrollShape(
   };
 }
 
-export function getEnrollmentStatus(username: string) {
-  const user = userRepo.findByUsername(username);
+export async function getEnrollmentStatus(username: string) {
+  const user = await userRepo.findByUsername(username);
   if (!user) {
     return {
       username,
@@ -271,15 +262,17 @@ export function getEnrollmentStatus(username: string) {
     };
   }
 
-  const shapeSamples = shapeRepo.getShapeSamples(user.id);
-  const shapesEnrolled = shapeSamples.map(s => s.shape_type);
+  const [sampleCount, shapeSamples] = await Promise.all([
+    sigRepo.getSampleCount(user.id),
+    shapeRepo.getShapeSamples(user.id),
+  ]);
 
   return {
     username,
     enrolled: !!user.enrolled,
-    samplesCollected: sigRepo.getSampleCount(user.id),
+    samplesCollected: sampleCount,
     samplesRequired: THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED,
-    shapesEnrolled,
+    shapesEnrolled: shapeSamples.map(s => s.shape_type),
     shapesRequired: ALL_CHALLENGE_TYPES as string[],
   };
 }

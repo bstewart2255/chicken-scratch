@@ -10,7 +10,7 @@ CREATE TABLE shape_samples_new (
   biometric_features TEXT NOT NULL,
   shape_features TEXT,              -- NULL for drawings (biometric-only)
   device_capabilities TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, shape_type)
 );
 
@@ -26,8 +26,8 @@ CREATE TABLE shape_baselines_new (
   shape_type TEXT NOT NULL CHECK (shape_type IN ('circle', 'square', 'triangle', 'house', 'smiley')),
   avg_biometric_features TEXT NOT NULL,
   avg_shape_features TEXT,          -- NULL for drawings (biometric-only)
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, shape_type)
 );
 

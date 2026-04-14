@@ -17,11 +17,10 @@ router.use('/api/v1', requireApiKey);
  * Resolve externalUserId to internal username.
  * Creates user + mapping if they don't exist yet (enrollment flow).
  */
-function resolveUser(tenantId: string, externalUserId: string, createIfMissing: boolean = false) {
+async function resolveUser(tenantId: string, externalUserId: string, createIfMissing: boolean = false) {
   const internalUsername = tenantRepo.toInternalUsername(tenantId, externalUserId);
 
-  // Check if mapping exists
-  const mapping = tenantRepo.findTenantUser(tenantId, externalUserId);
+  const mapping = await tenantRepo.findTenantUser(tenantId, externalUserId);
   if (mapping) {
     return { username: internalUsername, userId: mapping.user_id, exists: true };
   }
@@ -30,132 +29,154 @@ function resolveUser(tenantId: string, externalUserId: string, createIfMissing: 
     return { username: internalUsername, userId: null, exists: false };
   }
 
-  // Create internal user and mapping
-  const user = userRepo.createUser(internalUsername);
-  tenantRepo.createTenantUser(tenantId, externalUserId, user.id);
+  const user = await userRepo.createUser(internalUsername);
+  await tenantRepo.createTenantUser(tenantId, externalUserId, user.id);
   return { username: internalUsername, userId: user.id, exists: true };
 }
 
 // --- Enrollment ---
 
-router.post('/api/v1/enroll', validate(TenantEnrollRequestSchema), (req, res) => {
-  const { externalUserId, signatureData } = req.body;
-  const tenant = req.tenant!;
+router.post('/api/v1/enroll', validate(TenantEnrollRequestSchema), async (req, res, next) => {
+  try {
+    const { externalUserId, signatureData } = req.body;
+    const tenant = req.tenant!;
 
-  const { username } = resolveUser(tenant.id, externalUserId, true);
-  const result = enrollSample(username, signatureData);
+    const { username } = await resolveUser(tenant.id, externalUserId, true);
+    const result = await enrollSample(username, signatureData);
 
-  res.status(result.success ? 200 : 400).json({
-    success: result.success,
-    externalUserId,
-    sampleNumber: result.sampleNumber,
-    samplesRemaining: result.samplesRemaining,
-    enrolled: result.enrolled,
-    message: result.message,
-  });
-});
-
-router.post('/api/v1/enroll/shape', validate(TenantShapeEnrollRequestSchema), (req, res) => {
-  const { externalUserId, shapeType, signatureData } = req.body;
-  const tenant = req.tenant!;
-
-  const { username, exists } = resolveUser(tenant.id, externalUserId);
-  if (!exists) {
-    res.status(404).json({ success: false, error: 'User not found. Enroll signature first.' });
-    return;
+    res.status(result.success ? 200 : 400).json({
+      success: result.success,
+      externalUserId,
+      sampleNumber: result.sampleNumber,
+      samplesRemaining: result.samplesRemaining,
+      enrolled: result.enrolled,
+      message: result.message,
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const result = enrollShape(username, shapeType, signatureData);
-  res.status(result.success ? 200 : 400).json({
-    success: result.success,
-    externalUserId,
-    message: result.message,
-  });
 });
 
-router.get('/api/v1/enroll/:externalUserId/status', (req, res) => {
-  const tenant = req.tenant!;
-  const externalUserId = req.params.externalUserId;
-  const internalUsername = tenantRepo.toInternalUsername(tenant.id, externalUserId);
+router.post('/api/v1/enroll/shape', validate(TenantShapeEnrollRequestSchema), async (req, res, next) => {
+  try {
+    const { externalUserId, shapeType, signatureData } = req.body;
+    const tenant = req.tenant!;
 
-  const status = getEnrollmentStatus(internalUsername);
+    const { username, exists } = await resolveUser(tenant.id, externalUserId);
+    if (!exists) {
+      res.status(404).json({ success: false, error: 'User not found. Enroll signature first.' });
+      return;
+    }
 
-  res.json({
-    externalUserId,
-    enrolled: status.enrolled,
-    samplesCollected: status.samplesCollected,
-    samplesRequired: status.samplesRequired,
-    shapesEnrolled: status.shapesEnrolled,
-    shapesRequired: status.shapesRequired,
-  });
+    const result = await enrollShape(username, shapeType, signatureData);
+    res.status(result.success ? 200 : 400).json({
+      success: result.success,
+      externalUserId,
+      message: result.message,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/api/v1/enroll/:externalUserId/status', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const externalUserId = req.params.externalUserId;
+    const internalUsername = tenantRepo.toInternalUsername(tenant.id, externalUserId);
+
+    const status = await getEnrollmentStatus(internalUsername);
+
+    res.json({
+      externalUserId,
+      enrolled: status.enrolled,
+      samplesCollected: status.samplesCollected,
+      samplesRequired: status.samplesRequired,
+      shapesEnrolled: status.shapesEnrolled,
+      shapesRequired: status.shapesRequired,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // --- Verification ---
 
-router.post('/api/v1/challenge', validate(TenantChallengeRequestSchema), (req, res) => {
-  const { externalUserId } = req.body;
-  const tenant = req.tenant!;
+router.post('/api/v1/challenge', validate(TenantChallengeRequestSchema), async (req, res, next) => {
+  try {
+    const { externalUserId } = req.body;
+    const tenant = req.tenant!;
 
-  const { exists } = resolveUser(tenant.id, externalUserId);
-  if (!exists) {
-    res.status(404).json({ success: false, error: 'User not found.' });
-    return;
+    const { exists } = await resolveUser(tenant.id, externalUserId);
+    if (!exists) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    const internalUsername = tenantRepo.toInternalUsername(tenant.id, externalUserId);
+    const challenge = await createChallenge(internalUsername);
+
+    res.json({
+      challengeId: challenge.challengeId,
+      shapeOrder: challenge.shapeOrder,
+      expiresAt: challenge.expiresAt,
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const internalUsername = tenantRepo.toInternalUsername(tenant.id, externalUserId);
-  const challenge = createChallenge(internalUsername);
-
-  res.json({
-    challengeId: challenge.challengeId,
-    shapeOrder: challenge.shapeOrder,
-    expiresAt: challenge.expiresAt,
-  });
 });
 
-router.post('/api/v1/verify', validate(TenantVerifyFullRequestSchema), (req, res) => {
-  const { externalUserId, signatureData, shapes, challengeId, durationMs, stepDurations } = req.body;
-  const tenant = req.tenant!;
+router.post('/api/v1/verify', validate(TenantVerifyFullRequestSchema), async (req, res, next) => {
+  try {
+    const { externalUserId, signatureData, shapes, challengeId, durationMs, stepDurations } = req.body;
+    const tenant = req.tenant!;
 
-  const { username, exists } = resolveUser(tenant.id, externalUserId);
-  if (!exists) {
-    res.status(404).json({ success: false, error: 'User not found.' });
-    return;
+    const { username, exists } = await resolveUser(tenant.id, externalUserId);
+    if (!exists) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    const result = await verifyFull(
+      username,
+      signatureData,
+      shapes,
+      challengeId,
+      (durationMs || stepDurations) ? { durationMs, stepDurations } : undefined,
+    );
+
+    // Only return pass/fail — never expose scores
+    res.json({
+      success: result.success,
+      authenticated: result.authenticated,
+      message: result.authenticated ? 'Authentication successful.' : 'Authentication failed.',
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const result = verifyFull(
-    username,
-    signatureData,
-    shapes,
-    challengeId,
-    (durationMs || stepDurations) ? { durationMs, stepDurations } : undefined,
-  );
-
-  // Only return pass/fail — never expose scores
-  res.json({
-    success: result.success,
-    authenticated: result.authenticated,
-    message: result.authenticated ? 'Authentication successful.' : 'Authentication failed.',
-  });
 });
 
 // --- User management ---
 
-router.delete('/api/v1/users/:externalUserId', (req, res) => {
-  const tenant = req.tenant!;
-  const externalUserId = req.params.externalUserId;
+router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const externalUserId = req.params.externalUserId;
 
-  const mapping = tenantRepo.findTenantUser(tenant.id, externalUserId);
-  if (!mapping) {
-    res.status(404).json({ success: false, error: 'User not found.' });
-    return;
+    const mapping = await tenantRepo.findTenantUser(tenant.id, externalUserId);
+    if (!mapping) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    // TODO: Implement full user deletion (biometric data, baselines, attempts)
+    res.status(501).json({
+      success: false,
+      error: 'User deletion not yet implemented. Required for BIPA/GDPR compliance.',
+    });
+  } catch (err) {
+    next(err);
   }
-
-  // TODO: Implement full user deletion (biometric data, baselines, attempts)
-  // For now, return not implemented
-  res.status(501).json({
-    success: false,
-    error: 'User deletion not yet implemented. Required for BIPA/GDPR compliance.',
-  });
 });
 
 export default router;

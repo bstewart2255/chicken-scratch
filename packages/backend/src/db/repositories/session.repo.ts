@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { query } from '../connection.js';
 import type { SessionType, SessionStatus } from '@chicken-scratch/shared';
 
 export interface SessionRow {
@@ -13,44 +13,44 @@ export interface SessionRow {
   expires_at: string;
 }
 
-export function createSession(
+export async function createSession(
   username: string,
   type: SessionType,
   expiresAt: string,
   shapeOrder: string[],
-): SessionRow {
-  const db = getDb();
+): Promise<SessionRow> {
   const id = uuid();
-  db.prepare(`
+  const result = await query<SessionRow>(`
     INSERT INTO sessions (id, username, type, status, shape_order, expires_at)
-    VALUES (?, ?, ?, 'pending', ?, ?)
-  `).run(id, username, type, JSON.stringify(shapeOrder), expiresAt);
-  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow;
+    VALUES ($1, $2, $3, 'pending', $4, $5)
+    RETURNING *
+  `, [id, username, type, JSON.stringify(shapeOrder), expiresAt]);
+  return result.rows[0];
 }
 
-export function getSession(id: string): SessionRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+export async function getSession(id: string): Promise<SessionRow | undefined> {
+  const result = await query<SessionRow>(
+    'SELECT * FROM sessions WHERE id = $1',
+    [id],
+  );
+  return result.rows[0];
 }
 
-export function updateSessionStatus(id: string, status: SessionStatus): void {
-  const db = getDb();
-  db.prepare('UPDATE sessions SET status = ? WHERE id = ?').run(status, id);
+export async function updateSessionStatus(id: string, status: SessionStatus): Promise<void> {
+  await query('UPDATE sessions SET status = $1 WHERE id = $2', [status, id]);
 }
 
-export function completeSession(id: string, result: Record<string, unknown>): void {
-  const db = getDb();
-  db.prepare(`
-    UPDATE sessions SET status = 'completed', result = ? WHERE id = ?
-  `).run(JSON.stringify(result), id);
+export async function completeSession(id: string, result: Record<string, unknown>): Promise<void> {
+  await query(`
+    UPDATE sessions SET status = 'completed', result = $1 WHERE id = $2
+  `, [JSON.stringify(result), id]);
 }
 
-export function expireOldSessions(): number {
-  const db = getDb();
-  const info = db.prepare(`
+export async function expireOldSessions(): Promise<number> {
+  const result = await query(`
     UPDATE sessions SET status = 'expired'
     WHERE status IN ('pending', 'in_progress')
-    AND expires_at < datetime('now')
-  `).run();
-  return info.changes;
+    AND expires_at < NOW()
+  `);
+  return result.rowCount ?? 0;
 }

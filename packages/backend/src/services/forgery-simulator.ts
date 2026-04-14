@@ -273,19 +273,19 @@ const LEVEL_METADATA: Record<ForgeryLevel, { label: string; description: string 
   },
 };
 
-export function runForgerySimulation(
+export async function runForgerySimulation(
   username: string,
   trialsPerLevel: number = 20,
-): ForgerySimulationResult {
-  const user = userRepo.findByUsername(username);
+): Promise<ForgerySimulationResult> {
+  const user = await userRepo.findByUsername(username);
   if (!user) throw new Error(`User '${username}' not found`);
   if (!user.enrolled) throw new Error(`User '${username}' is not enrolled`);
 
   // Load enrolled data
-  const sigBaseline = sigRepo.getBaseline(user.id);
+  const sigBaseline = await sigRepo.getBaseline(user.id);
   if (!sigBaseline) throw new Error('No signature baseline found');
 
-  const sigSamples = sigRepo.getSamples(user.id);
+  const sigSamples = await sigRepo.getSamples(user.id);
   if (sigSamples.length === 0) throw new Error('No signature samples found');
 
   // Use first signature sample as the source for perturbation
@@ -295,8 +295,10 @@ export function runForgerySimulation(
   // Load shape/drawing enrolled data
   const shapeData: EnrolledData['shapeData'] = [];
   for (const shapeType of ALL_CHALLENGE_TYPES) {
-    const shapeSample = shapeRepo.getShapeSample(user.id, shapeType);
-    const shapeBaseline = shapeRepo.getShapeBaseline(user.id, shapeType);
+    const [shapeSample, shapeBaseline] = await Promise.all([
+      shapeRepo.getShapeSample(user.id, shapeType),
+      shapeRepo.getShapeBaseline(user.id, shapeType),
+    ]);
     if (!shapeSample || !shapeBaseline) continue;
 
     shapeData.push({
@@ -316,8 +318,8 @@ export function runForgerySimulation(
   };
 
   // Get real user mean score from actual attempts
-  const attempts = authAttemptRepo.getAllAttempts(user.id);
-  const realScores = attempts.filter(a => a.authenticated === 1).map(a => a.score);
+  const attempts = await authAttemptRepo.getAllAttempts(user.id);
+  const realScores = attempts.filter(a => a.authenticated).map(a => a.score);
   const realUserMeanScore = realScores.length > 0
     ? realScores.reduce((a, b) => a + b, 0) / realScores.length
     : 0;

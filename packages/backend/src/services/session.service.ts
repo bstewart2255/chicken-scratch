@@ -25,15 +25,15 @@ function shuffle<T>(arr: T[]): T[] {
   return result;
 }
 
-export function createSession(
+export async function createSession(
   username: string,
   type: SessionType,
-): CreateSessionResponse {
-  sessionRepo.expireOldSessions();
+): Promise<CreateSessionResponse> {
+  await sessionRepo.expireOldSessions();
 
   const shapeOrder = shuffle([...ALL_CHALLENGE_TYPES]);
   const expiresAt = new Date(Date.now() + THRESHOLDS.SESSION_TTL_MS).toISOString();
-  const session = sessionRepo.createSession(username, type, expiresAt, shapeOrder);
+  const session = await sessionRepo.createSession(username, type, expiresAt, shapeOrder);
 
   const lanIp = getLanIp();
   const url = `http://${lanIp}:5173/mobile/${session.id}`;
@@ -48,14 +48,13 @@ export function createSession(
 
 /**
  * Create a challenge for desktop verification (no QR session).
- * Returns a session-backed challenge with a randomized shape order.
  */
-export function createChallenge(username: string): ChallengeResponse {
-  sessionRepo.expireOldSessions();
+export async function createChallenge(username: string): Promise<ChallengeResponse> {
+  await sessionRepo.expireOldSessions();
 
   const shapeOrder = shuffle([...ALL_CHALLENGE_TYPES]);
   const expiresAt = new Date(Date.now() + THRESHOLDS.SESSION_TTL_MS).toISOString();
-  const session = sessionRepo.createSession(username, 'verify', expiresAt, shapeOrder);
+  const session = await sessionRepo.createSession(username, 'verify', expiresAt, shapeOrder);
 
   return {
     challengeId: session.id,
@@ -68,12 +67,11 @@ export function createChallenge(username: string): ChallengeResponse {
  * Validate that submitted shapes match the challenge's required order.
  * Returns null if valid, or an error message if invalid.
  */
-export function validateShapeOrder(challengeId: string, submittedShapeTypes: string[]): string | null {
-  sessionRepo.expireOldSessions(); // ensure expired sessions are marked before checking
-  const session = sessionRepo.getSession(challengeId);
+export async function validateShapeOrder(challengeId: string, submittedShapeTypes: string[]): Promise<string | null> {
+  await sessionRepo.expireOldSessions();
+  const session = await sessionRepo.getSession(challengeId);
   if (!session) return 'Challenge not found or expired.';
 
-  // Check session hasn't already been used
   if (session.status === 'completed') return 'Challenge already used.';
   if (session.status === 'expired') return 'Challenge expired.';
 
@@ -89,14 +87,13 @@ export function validateShapeOrder(challengeId: string, submittedShapeTypes: str
     }
   }
 
-  // Mark challenge as used
-  sessionRepo.updateSessionStatus(challengeId, 'completed');
+  await sessionRepo.updateSessionStatus(challengeId, 'completed');
   return null;
 }
 
-export function getSession(id: string) {
-  sessionRepo.expireOldSessions();
-  const session = sessionRepo.getSession(id);
+export async function getSession(id: string) {
+  await sessionRepo.expireOldSessions();
+  const session = await sessionRepo.getSession(id);
   if (!session) return null;
   return {
     id: session.id,
@@ -110,10 +107,10 @@ export function getSession(id: string) {
   };
 }
 
-export function updateSessionStatus(id: string, status: 'pending' | 'in_progress' | 'completed' | 'expired') {
-  sessionRepo.updateSessionStatus(id, status);
+export async function updateSessionStatus(id: string, status: 'pending' | 'in_progress' | 'completed' | 'expired') {
+  await sessionRepo.updateSessionStatus(id, status);
 }
 
-export function completeSession(id: string, result: Record<string, unknown>) {
-  sessionRepo.completeSession(id, result);
+export async function completeSession(id: string, result: Record<string, unknown>) {
+  await sessionRepo.completeSession(id, result);
 }

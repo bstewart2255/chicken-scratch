@@ -25,15 +25,17 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  const tenant = tenantRepo.findByApiKey(apiKey);
-  if (!tenant) {
-    res.status(401).json({
-      success: false,
-      error: 'Invalid or inactive API key.',
-    });
-    return;
-  }
-
-  req.tenant = tenant;
-  next();
+  tenantRepo.findByApiKey(apiKey)
+    .then(tenant => {
+      if (!tenant) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid or inactive API key.',
+        });
+        return;
+      }
+      req.tenant = tenant;
+      next();
+    })
+    .catch(next);
 }

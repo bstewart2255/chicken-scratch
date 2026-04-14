@@ -5,14 +5,21 @@ import { initEncryption } from './utils/crypto.js';
 
 const port = parseInt(process.env.PORT || '3003', 10);
 
-// Initialize encryption (reads ENCRYPTION_KEY from env)
-initEncryption();
+async function main() {
+  // Initialize encryption (reads ENCRYPTION_KEY from env)
+  initEncryption();
 
-// Run migrations on startup
-runMigrations();
+  // Run migrations on startup
+  await runMigrations();
 
-const app = createApp();
+  const app = createApp();
 
-app.listen(port, () => {
-  console.log(`chickenScratch backend running on http://localhost:${port}`);
+  app.listen(port, () => {
+    console.log(`chickenScratch backend running on http://localhost:${port}`);
+  });
+}
+
+main().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

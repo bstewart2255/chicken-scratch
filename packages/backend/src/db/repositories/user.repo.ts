@@ -1,33 +1,37 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { query } from '../connection.js';
 
 export interface UserRow {
   id: string;
   username: string;
-  enrolled: number;
+  enrolled: boolean;
   created_at: string;
 }
 
-export function createUser(username: string): UserRow {
-  const db = getDb();
+export async function createUser(username: string): Promise<UserRow> {
   const id = uuid();
-  db.prepare(
-    'INSERT INTO users (id, username) VALUES (?, ?)'
-  ).run(id, username);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+  const result = await query<UserRow>(
+    'INSERT INTO users (id, username) VALUES ($1, $2) RETURNING *',
+    [id, username],
+  );
+  return result.rows[0];
 }
 
-export function findByUsername(username: string): UserRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM users WHERE username = ?').get(username) as UserRow | undefined;
+export async function findByUsername(username: string): Promise<UserRow | undefined> {
+  const result = await query<UserRow>(
+    'SELECT * FROM users WHERE username = $1',
+    [username],
+  );
+  return result.rows[0];
 }
 
-export function markEnrolled(userId: string): void {
-  const db = getDb();
-  db.prepare('UPDATE users SET enrolled = 1 WHERE id = ?').run(userId);
+export async function markEnrolled(userId: string): Promise<void> {
+  await query('UPDATE users SET enrolled = TRUE WHERE id = $1', [userId]);
 }
 
-export function listUsers(): UserRow[] {
-  const db = getDb();
-  return db.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as UserRow[];
+export async function listUsers(): Promise<UserRow[]> {
+  const result = await query<UserRow>(
+    'SELECT * FROM users ORDER BY created_at DESC',
+  );
+  return result.rows;
 }

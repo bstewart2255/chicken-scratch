@@ -1,12 +1,12 @@
 import { v4 as uuid } from 'uuid';
 import crypto from 'crypto';
-import { getDb } from '../connection.js';
+import { query } from '../connection.js';
 
 export interface TenantRow {
   id: string;
   name: string;
   api_key: string;
-  active: number;
+  active: boolean;
   created_at: string;
 }
 
@@ -22,76 +22,82 @@ function generateApiKey(): string {
   return `cs_${crypto.randomBytes(32).toString('hex')}`;
 }
 
-export function createTenant(name: string): TenantRow {
-  const db = getDb();
+export async function createTenant(name: string): Promise<TenantRow> {
   const id = uuid();
   const apiKey = generateApiKey();
-  db.prepare(
-    'INSERT INTO tenants (id, name, api_key) VALUES (?, ?, ?)'
-  ).run(id, name, apiKey);
-  return db.prepare('SELECT * FROM tenants WHERE id = ?').get(id) as TenantRow;
+  const result = await query<TenantRow>(
+    'INSERT INTO tenants (id, name, api_key) VALUES ($1, $2, $3) RETURNING *',
+    [id, name, apiKey],
+  );
+  return result.rows[0];
 }
 
-export function findByApiKey(apiKey: string): TenantRow | undefined {
-  const db = getDb();
-  return db.prepare(
-    'SELECT * FROM tenants WHERE api_key = ? AND active = 1'
-  ).get(apiKey) as TenantRow | undefined;
+export async function findByApiKey(apiKey: string): Promise<TenantRow | undefined> {
+  const result = await query<TenantRow>(
+    'SELECT * FROM tenants WHERE api_key = $1 AND active = TRUE',
+    [apiKey],
+  );
+  return result.rows[0];
 }
 
-export function findById(id: string): TenantRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM tenants WHERE id = ?').get(id) as TenantRow | undefined;
+export async function findById(id: string): Promise<TenantRow | undefined> {
+  const result = await query<TenantRow>(
+    'SELECT * FROM tenants WHERE id = $1',
+    [id],
+  );
+  return result.rows[0];
 }
 
-export function listTenants(): TenantRow[] {
-  const db = getDb();
-  return db.prepare('SELECT * FROM tenants ORDER BY created_at DESC').all() as TenantRow[];
+export async function listTenants(): Promise<TenantRow[]> {
+  const result = await query<TenantRow>(
+    'SELECT * FROM tenants ORDER BY created_at DESC',
+  );
+  return result.rows;
 }
 
-export function rotateApiKey(tenantId: string): string {
-  const db = getDb();
+export async function rotateApiKey(tenantId: string): Promise<string> {
   const newKey = generateApiKey();
-  db.prepare('UPDATE tenants SET api_key = ? WHERE id = ?').run(newKey, tenantId);
+  await query('UPDATE tenants SET api_key = $1 WHERE id = $2', [newKey, tenantId]);
   return newKey;
 }
 
-export function deactivateTenant(tenantId: string): void {
-  const db = getDb();
-  db.prepare('UPDATE tenants SET active = 0 WHERE id = ?').run(tenantId);
+export async function deactivateTenant(tenantId: string): Promise<void> {
+  await query('UPDATE tenants SET active = FALSE WHERE id = $1', [tenantId]);
 }
 
 // Tenant-user mapping
 
-export function findTenantUser(tenantId: string, externalUserId: string): TenantUserRow | undefined {
-  const db = getDb();
-  return db.prepare(
-    'SELECT * FROM tenant_users WHERE tenant_id = ? AND external_user_id = ?'
-  ).get(tenantId, externalUserId) as TenantUserRow | undefined;
+export async function findTenantUser(tenantId: string, externalUserId: string): Promise<TenantUserRow | undefined> {
+  const result = await query<TenantUserRow>(
+    'SELECT * FROM tenant_users WHERE tenant_id = $1 AND external_user_id = $2',
+    [tenantId, externalUserId],
+  );
+  return result.rows[0];
 }
 
-export function createTenantUser(tenantId: string, externalUserId: string, userId: string): TenantUserRow {
-  const db = getDb();
+export async function createTenantUser(tenantId: string, externalUserId: string, userId: string): Promise<TenantUserRow> {
   const id = uuid();
-  db.prepare(
-    'INSERT INTO tenant_users (id, tenant_id, external_user_id, user_id) VALUES (?, ?, ?, ?)'
-  ).run(id, tenantId, externalUserId, userId);
-  return db.prepare('SELECT * FROM tenant_users WHERE id = ?').get(id) as TenantUserRow;
+  const result = await query<TenantUserRow>(
+    'INSERT INTO tenant_users (id, tenant_id, external_user_id, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+    [id, tenantId, externalUserId, userId],
+  );
+  return result.rows[0];
 }
 
-export function listTenantUsers(tenantId: string): TenantUserRow[] {
-  const db = getDb();
-  return db.prepare(
-    'SELECT * FROM tenant_users WHERE tenant_id = ? ORDER BY created_at DESC'
-  ).all(tenantId) as TenantUserRow[];
+export async function listTenantUsers(tenantId: string): Promise<TenantUserRow[]> {
+  const result = await query<TenantUserRow>(
+    'SELECT * FROM tenant_users WHERE tenant_id = $1 ORDER BY created_at DESC',
+    [tenantId],
+  );
+  return result.rows;
 }
 
-export function getTenantUserCount(tenantId: string): number {
-  const db = getDb();
-  const row = db.prepare(
-    'SELECT COUNT(*) as count FROM tenant_users WHERE tenant_id = ?'
-  ).get(tenantId) as { count: number };
-  return row.count;
+export async function getTenantUserCount(tenantId: string): Promise<number> {
+  const result = await query<{ count: string }>(
+    'SELECT COUNT(*) as count FROM tenant_users WHERE tenant_id = $1',
+    [tenantId],
+  );
+  return parseInt(result.rows[0].count, 10);
 }
 
 /**

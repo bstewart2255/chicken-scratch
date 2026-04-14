@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   name TEXT NOT NULL,
   api_key TEXT NOT NULL UNIQUE,
   active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Mapping between tenant's external user IDs and our internal users
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS tenant_users (
   tenant_id TEXT NOT NULL REFERENCES tenants(id),
   external_user_id TEXT NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(tenant_id, external_user_id)
 );
 

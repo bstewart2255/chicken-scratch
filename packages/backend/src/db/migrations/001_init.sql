@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
   enrolled INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS enrollment_samples (
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS enrollment_samples (
   features TEXT NOT NULL,          -- JSON (AllFeatures)
   ml_features TEXT NOT NULL,       -- JSON (MLFeatureVector)
   device_capabilities TEXT NOT NULL, -- JSON
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, sample_number)
 );
 
@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS baselines (
   avg_ml_features TEXT NOT NULL,   -- JSON (MLFeatureVector averaged)
   feature_std_devs TEXT NOT NULL,  -- JSON (per-feature standard deviations)
   has_pressure_data INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS auth_attempts (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
   authenticated INTEGER NOT NULL,
   breakdown TEXT NOT NULL,         -- JSON (FeatureComparison)
   device_capabilities TEXT NOT NULL, -- JSON
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_enrollment_samples_user ON enrollment_samples(user_id);

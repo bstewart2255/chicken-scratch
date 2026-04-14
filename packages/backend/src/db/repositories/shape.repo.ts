@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { query } from '../connection.js';
 import { encryptJson, decrypt } from '../../utils/crypto.js';
 import type { AllFeatures, RawSignatureData, DeviceCapabilities, ChallengeItemType, ShapeSpecificFeatures } from '@chicken-scratch/shared';
 
@@ -41,89 +41,91 @@ function decryptBaselineRow(row: ShapeBaselineRow): ShapeBaselineRow {
   };
 }
 
-export function createShapeSample(
+export async function createShapeSample(
   userId: string,
   shapeType: ChallengeItemType,
   strokeData: RawSignatureData,
   biometricFeatures: AllFeatures,
   shapeFeatures: ShapeSpecificFeatures | null,
   deviceCapabilities: DeviceCapabilities,
-): ShapeSampleRow {
-  const db = getDb();
+): Promise<ShapeSampleRow> {
   const id = uuid();
-  db.prepare(`
+  const result = await query<ShapeSampleRow>(`
     INSERT INTO shape_samples (id, user_id, shape_type, stroke_data, biometric_features, shape_features, device_capabilities)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT(user_id, shape_type) DO UPDATE SET
-      stroke_data = excluded.stroke_data,
-      biometric_features = excluded.biometric_features,
-      shape_features = excluded.shape_features,
-      device_capabilities = excluded.device_capabilities
-  `).run(
+      stroke_data = EXCLUDED.stroke_data,
+      biometric_features = EXCLUDED.biometric_features,
+      shape_features = EXCLUDED.shape_features,
+      device_capabilities = EXCLUDED.device_capabilities
+    RETURNING *
+  `, [
     id,
     userId,
     shapeType,
     encryptJson(strokeData),
     encryptJson(biometricFeatures),
     shapeFeatures !== null ? encryptJson(shapeFeatures) : JSON.stringify(null),
-    JSON.stringify(deviceCapabilities), // not biometric — no encryption needed
-  );
-  return db.prepare('SELECT * FROM shape_samples WHERE user_id = ? AND shape_type = ?').get(userId, shapeType) as ShapeSampleRow;
+    JSON.stringify(deviceCapabilities),
+  ]);
+  return result.rows[0];
 }
 
-export function getShapeSample(userId: string, shapeType: ChallengeItemType): ShapeSampleRow | undefined {
-  const db = getDb();
-  const row = db.prepare(
-    'SELECT * FROM shape_samples WHERE user_id = ? AND shape_type = ?'
-  ).get(userId, shapeType) as ShapeSampleRow | undefined;
+export async function getShapeSample(userId: string, shapeType: ChallengeItemType): Promise<ShapeSampleRow | undefined> {
+  const result = await query<ShapeSampleRow>(
+    'SELECT * FROM shape_samples WHERE user_id = $1 AND shape_type = $2',
+    [userId, shapeType],
+  );
+  const row = result.rows[0];
   return row ? decryptSampleRow(row) : undefined;
 }
 
-export function getShapeSamples(userId: string): ShapeSampleRow[] {
-  const db = getDb();
-  const rows = db.prepare(
-    'SELECT * FROM shape_samples WHERE user_id = ? ORDER BY shape_type'
-  ).all(userId) as ShapeSampleRow[];
-  return rows.map(decryptSampleRow);
+export async function getShapeSamples(userId: string): Promise<ShapeSampleRow[]> {
+  const result = await query<ShapeSampleRow>(
+    'SELECT * FROM shape_samples WHERE user_id = $1 ORDER BY shape_type',
+    [userId],
+  );
+  return result.rows.map(decryptSampleRow);
 }
 
-export function upsertShapeBaseline(
+export async function upsertShapeBaseline(
   userId: string,
   shapeType: ChallengeItemType,
   avgBiometricFeatures: AllFeatures,
   avgShapeFeatures: ShapeSpecificFeatures | null,
-): ShapeBaselineRow {
-  const db = getDb();
+): Promise<ShapeBaselineRow> {
   const id = uuid();
-  db.prepare(`
+  const result = await query<ShapeBaselineRow>(`
     INSERT INTO shape_baselines (id, user_id, shape_type, avg_biometric_features, avg_shape_features)
-    VALUES (?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT(user_id, shape_type) DO UPDATE SET
-      avg_biometric_features = excluded.avg_biometric_features,
-      avg_shape_features = excluded.avg_shape_features,
-      updated_at = datetime('now')
-  `).run(
+      avg_biometric_features = EXCLUDED.avg_biometric_features,
+      avg_shape_features = EXCLUDED.avg_shape_features,
+      updated_at = NOW()
+    RETURNING *
+  `, [
     id,
     userId,
     shapeType,
     encryptJson(avgBiometricFeatures),
     avgShapeFeatures !== null ? encryptJson(avgShapeFeatures) : JSON.stringify(null),
-  );
-  return db.prepare('SELECT * FROM shape_baselines WHERE user_id = ? AND shape_type = ?').get(userId, shapeType) as ShapeBaselineRow;
+  ]);
+  return result.rows[0];
 }
 
-export function getShapeBaseline(userId: string, shapeType: ChallengeItemType): ShapeBaselineRow | undefined {
-  const db = getDb();
-  const row = db.prepare(
-    'SELECT * FROM shape_baselines WHERE user_id = ? AND shape_type = ?'
-  ).get(userId, shapeType) as ShapeBaselineRow | undefined;
+export async function getShapeBaseline(userId: string, shapeType: ChallengeItemType): Promise<ShapeBaselineRow | undefined> {
+  const result = await query<ShapeBaselineRow>(
+    'SELECT * FROM shape_baselines WHERE user_id = $1 AND shape_type = $2',
+    [userId, shapeType],
+  );
+  const row = result.rows[0];
   return row ? decryptBaselineRow(row) : undefined;
 }
 
-export function getShapeBaselines(userId: string): ShapeBaselineRow[] {
-  const db = getDb();
-  const rows = db.prepare(
-    'SELECT * FROM shape_baselines WHERE user_id = ? ORDER BY shape_type'
-  ).all(userId) as ShapeBaselineRow[];
-  return rows.map(decryptBaselineRow);
+export async function getShapeBaselines(userId: string): Promise<ShapeBaselineRow[]> {
+  const result = await query<ShapeBaselineRow>(
+    'SELECT * FROM shape_baselines WHERE user_id = $1 ORDER BY shape_type',
+    [userId],
+  );
+  return result.rows.map(decryptBaselineRow);
 }

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS shape_samples (
   biometric_features TEXT NOT NULL,     -- JSON (AllFeatures)
   shape_features TEXT NOT NULL,         -- JSON (ShapeSpecificFeatures)
   device_capabilities TEXT NOT NULL,    -- JSON
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, shape_type)
 );
 
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS shape_baselines (
   shape_type TEXT NOT NULL CHECK (shape_type IN ('circle', 'square', 'triangle')),
   avg_biometric_features TEXT NOT NULL, -- JSON (AllFeatures averaged)
   avg_shape_features TEXT NOT NULL,     -- JSON (ShapeSpecificFeatures)
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, shape_type)
 );
 
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   type TEXT NOT NULL CHECK (type IN ('enroll', 'verify')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'expired')),
   result TEXT,                          -- JSON (result data, null until completed)
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TEXT NOT NULL
 );
 

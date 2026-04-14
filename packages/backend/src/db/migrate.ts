@@ -1,18 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, closeDb } from './connection.js';
+import { query, closePool } from './connection.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function runMigrations(): void {
-  const db = getDb();
-
+export async function runMigrations(): Promise<void> {
   // Create migrations tracking table
-  db.exec(`
+  await query(`
     CREATE TABLE IF NOT EXISTS _migrations (
       name TEXT PRIMARY KEY,
-      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -22,13 +20,12 @@ export function runMigrations(): void {
     .sort();
 
   for (const file of files) {
-    // Skip if already applied
-    const existing = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get(file);
-    if (existing) continue;
+    const existing = await query('SELECT 1 FROM _migrations WHERE name = $1', [file]);
+    if (existing.rows.length > 0) continue;
 
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-    db.exec(sql);
-    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
+    await query(sql);
+    await query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
     console.log(`Migration applied: ${file}`);
   }
 }
@@ -36,7 +33,13 @@ export function runMigrations(): void {
 // Run directly if called as script
 const isMain = process.argv[1] && fileURLToPath(import.meta.url).includes(process.argv[1].replace(/\.ts$/, ''));
 if (isMain) {
-  runMigrations();
-  closeDb();
-  console.log('All migrations complete.');
+  runMigrations()
+    .then(() => {
+      console.log('All migrations complete.');
+      return closePool();
+    })
+    .catch(err => {
+      console.error('Migration failed:', err);
+      process.exit(1);
+    });
 }
