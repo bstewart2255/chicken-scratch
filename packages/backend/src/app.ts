@@ -22,8 +22,10 @@ export function createApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        // Allow inline styles for the privacy policy page
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
         styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'"],
+        imgSrc: ["'self'", "data:"],
       },
     },
   }));
@@ -84,6 +86,21 @@ export function createApp() {
   if (process.env.NODE_ENV !== 'production') {
     const sdkDir = path.resolve(process.cwd(), '../sdk');
     app.use('/sdk', express.static(sdkDir));
+  }
+
+  // Serve frontend static files in production
+  const frontendDist = path.resolve(__dirname, '../../../frontend/dist');
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+
+    // SPA catch-all: serve index.html for any non-API route
+    app.get('*', (req, res, next) => {
+      // Don't catch API routes or other known paths
+      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/docs' || req.path === '/privacy' || req.path === '/openapi.yaml') {
+        return next();
+      }
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
   }
 
   app.use(errorHandler);
