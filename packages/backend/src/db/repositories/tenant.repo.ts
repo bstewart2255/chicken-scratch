@@ -6,8 +6,11 @@ export interface TenantRow {
   id: string;
   name: string;
   api_key: string;
+  slug: string | null;
+  plan: string;
   active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface TenantUserRow {
@@ -62,7 +65,52 @@ export async function rotateApiKey(tenantId: string): Promise<string> {
 }
 
 export async function deactivateTenant(tenantId: string): Promise<void> {
-  await query('UPDATE tenants SET active = FALSE WHERE id = $1', [tenantId]);
+  await query('UPDATE tenants SET active = FALSE, updated_at = NOW() WHERE id = $1', [tenantId]);
+}
+
+export async function reactivateTenant(tenantId: string): Promise<void> {
+  await query('UPDATE tenants SET active = TRUE, updated_at = NOW() WHERE id = $1', [tenantId]);
+}
+
+export async function findBySlug(slug: string): Promise<TenantRow | undefined> {
+  const result = await query<TenantRow>(
+    'SELECT * FROM tenants WHERE slug = $1',
+    [slug],
+  );
+  return result.rows[0];
+}
+
+export async function updateTenant(
+  tenantId: string,
+  updates: { name?: string; slug?: string; plan?: string; active?: boolean },
+): Promise<TenantRow | undefined> {
+  const setClauses: string[] = ['updated_at = NOW()'];
+  const values: unknown[] = [];
+  let paramIdx = 1;
+
+  if (updates.name !== undefined) {
+    setClauses.push(`name = $${paramIdx++}`);
+    values.push(updates.name);
+  }
+  if (updates.slug !== undefined) {
+    setClauses.push(`slug = $${paramIdx++}`);
+    values.push(updates.slug);
+  }
+  if (updates.plan !== undefined) {
+    setClauses.push(`plan = $${paramIdx++}`);
+    values.push(updates.plan);
+  }
+  if (updates.active !== undefined) {
+    setClauses.push(`active = $${paramIdx++}`);
+    values.push(updates.active);
+  }
+
+  values.push(tenantId);
+  const result = await query<TenantRow>(
+    `UPDATE tenants SET ${setClauses.join(', ')} WHERE id = $${paramIdx} RETURNING *`,
+    values,
+  );
+  return result.rows[0];
 }
 
 // Tenant-user mapping

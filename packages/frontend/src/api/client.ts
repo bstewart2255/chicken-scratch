@@ -106,3 +106,87 @@ export function runForgerySimulation(username: string, trialsPerLevel: number = 
     body: JSON.stringify({ trialsPerLevel }),
   });
 }
+
+// Admin API — requires ADMIN_API_KEY
+// In dev, the key is read from localStorage for convenience
+
+function adminHeaders(): HeadersInit {
+  const key = localStorage.getItem('adminApiKey') || '';
+  return {
+    'Content-Type': 'application/json',
+    ...(key ? { 'Authorization': `Bearer ${key}` } : {}),
+  };
+}
+
+async function adminRequest<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${url}`, {
+    headers: adminHeaders(),
+    ...options,
+  });
+  const data = await res.json();
+  if (!res.ok && !data.success) {
+    throw new Error(data.message || data.error || `Request failed: ${res.status}`);
+  }
+  return data as T;
+}
+
+// Dashboard
+export function getAdminDashboard(): Promise<{
+  totalTenants: number; activeTenants: number;
+  totalUsers: number; enrolledUsers: number;
+  totalVerifications: number; verificationsToday: number;
+  recentFailureRate: number;
+}> {
+  return adminRequest('/admin/dashboard');
+}
+
+// Tenants
+export function getAdminTenants(): Promise<any[]> {
+  return adminRequest('/admin/tenants');
+}
+
+export function getAdminTenant(id: string): Promise<any> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(id)}`);
+}
+
+export function createAdminTenant(body: { name: string; slug?: string; plan?: string }): Promise<any> {
+  return adminRequest('/admin/tenants', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateAdminTenant(id: string, body: Record<string, unknown>): Promise<any> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deactivateAdminTenant(id: string): Promise<{ success: boolean }> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(id)}/deactivate`, { method: 'POST' });
+}
+
+export function reactivateAdminTenant(id: string): Promise<{ success: boolean }> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(id)}/reactivate`, { method: 'POST' });
+}
+
+// API Keys
+export function createAdminApiKey(tenantId: string, name: string): Promise<any> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(tenantId)}/api-keys`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function getAdminApiKeys(tenantId: string): Promise<any[]> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(tenantId)}/api-keys`);
+}
+
+export function revokeAdminApiKey(tenantId: string, keyId: string): Promise<{ success: boolean }> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(tenantId)}/api-keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// Usage
+export function getAdminTenantUsage(tenantId: string, days: number = 30): Promise<{ date: string; enrollments: number; verifications: number }[]> {
+  return adminRequest(`/admin/tenants/${encodeURIComponent(tenantId)}/usage?days=${days}`);
+}

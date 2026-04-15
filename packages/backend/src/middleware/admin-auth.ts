@@ -1,9 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
 /**
- * Middleware that requires a valid admin key in the X-Admin-Key header.
+ * Middleware that requires a valid admin key.
+ * Accepts either X-Admin-Key header or Authorization: Bearer header.
  * Set ADMIN_API_KEY in environment variables — if unset, admin routes are
  * disabled entirely (returns 503) to prevent accidental open access.
+ * Uses constant-time comparison to prevent timing attacks.
  */
 export function requireAdminKey(req: Request, res: Response, next: NextFunction): void {
   const adminKey = process.env.ADMIN_API_KEY;
@@ -16,12 +19,19 @@ export function requireAdminKey(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  const provided = req.headers['x-admin-key'] as string | undefined;
+  // Accept both X-Admin-Key and Authorization: Bearer
+  let provided = req.headers['x-admin-key'] as string | undefined;
+  if (!provided) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      provided = authHeader.slice(7);
+    }
+  }
 
   if (!provided) {
     res.status(401).json({
       success: false,
-      error: 'Missing admin key. Include X-Admin-Key header.',
+      error: 'Missing admin key. Include X-Admin-Key or Authorization: Bearer header.',
     });
     return;
   }
@@ -29,7 +39,7 @@ export function requireAdminKey(req: Request, res: Response, next: NextFunction)
   // Constant-time comparison to prevent timing attacks
   const expected = Buffer.from(adminKey);
   const actual = Buffer.from(provided);
-  if (expected.length !== actual.length || !require('crypto').timingSafeEqual(expected, actual)) {
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
     res.status(401).json({
       success: false,
       error: 'Invalid admin key.',
