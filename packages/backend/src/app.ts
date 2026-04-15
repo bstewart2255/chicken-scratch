@@ -29,7 +29,26 @@ export function createApp() {
       },
     },
   }));
-  app.use(cors({ origin: true }));
+  // CORS: restrict to allowed origins in production
+  // Set ALLOWED_ORIGINS env var as comma-separated list (e.g., "https://example.com,https://app.example.com")
+  // If not set, allows all origins (dev mode)
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : null;
+
+  app.use(cors({
+    origin: allowedOrigins
+      ? (origin, callback) => {
+          // Allow requests with no origin (server-to-server, curl, etc.)
+          if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error('Not allowed by CORS'));
+          }
+        }
+      : true,
+    credentials: true,
+  }));
   app.use(express.json({ limit: '5mb' }));
 
   // Privacy policy — served as static HTML, no auth required
@@ -82,10 +101,12 @@ export function createApp() {
   app.use(tenantApiRoutes);
   app.use(adminRoutes);
 
-  // Serve SDK test page in development
-  if (process.env.NODE_ENV !== 'production') {
-    const sdkDir = path.resolve(process.cwd(), '../sdk');
-    app.use('/sdk', express.static(sdkDir));
+  // Serve SDK dist as a static asset (for <script> tag integration)
+  const sdkDir = path.resolve(process.cwd(), '../sdk');
+  if (fs.existsSync(sdkDir)) {
+    app.use('/sdk', express.static(sdkDir, {
+      maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0,
+    }));
   }
 
   // Serve frontend static files
