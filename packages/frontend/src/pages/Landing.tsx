@@ -297,11 +297,12 @@ function LiveDemo() {
         .then(session => {
           if (!session) { setState('error'); setError('Session not found.'); return; }
           if (session.status === 'completed') {
-            setSessionResult(session.result);
+            const result = session.result as Record<string, unknown> | null;
+            setSessionResult(result);
             // Now poll for verify session completion
             // The mobile page handles creating the verify session
             // Keep polling to detect the final result
-            if (session.result?.authenticated !== undefined) {
+            if (result && 'authenticated' in result) {
               setState('done');
               if (pollRef.current) clearInterval(pollRef.current);
             }
