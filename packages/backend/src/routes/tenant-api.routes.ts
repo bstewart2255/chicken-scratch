@@ -5,7 +5,7 @@ import { TenantEnrollRequestSchema, TenantShapeEnrollRequestSchema, TenantVerify
 import { enrollSample, enrollShape, getEnrollmentStatus } from '../services/enrollment.service.js';
 import { verifyFull } from '../services/auth.service.js';
 import { createChallenge } from '../services/session.service.js';
-import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate } from '../services/consent.service.js';
+import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, deleteUser } from '../services/consent.service.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
@@ -104,6 +104,7 @@ router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
       success: result.success,
       externalUserId,
       message: result.message,
+      deletionSummary: result.deletionSummary,
     });
   } catch (err) {
     next(err);
@@ -253,16 +254,18 @@ router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
     const tenant = req.tenant!;
     const externalUserId = req.params.externalUserId;
 
-    const mapping = await tenantRepo.findTenantUser(tenant.id, externalUserId);
-    if (!mapping) {
-      res.status(404).json({ success: false, error: 'User not found.' });
+    const result = await deleteUser(tenant.id, externalUserId);
+
+    if (!result.success) {
+      res.status(404).json({ success: false, error: result.message });
       return;
     }
 
-    // TODO: Implement full user deletion (biometric data, baselines, attempts)
-    res.status(501).json({
-      success: false,
-      error: 'User deletion not yet implemented. Required for BIPA/GDPR compliance.',
+    res.json({
+      success: true,
+      externalUserId,
+      message: result.message,
+      deletionSummary: result.deletionSummary,
     });
   } catch (err) {
     next(err);

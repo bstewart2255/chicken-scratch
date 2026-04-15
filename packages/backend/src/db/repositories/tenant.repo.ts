@@ -92,6 +92,13 @@ export async function listTenantUsers(tenantId: string): Promise<TenantUserRow[]
   return result.rows;
 }
 
+export async function deleteTenantUser(tenantId: string, externalUserId: string): Promise<void> {
+  await query(
+    'DELETE FROM tenant_users WHERE tenant_id = $1 AND external_user_id = $2',
+    [tenantId, externalUserId],
+  );
+}
+
 export async function getTenantUserCount(tenantId: string): Promise<number> {
   const result = await query<{ count: string }>(
     'SELECT COUNT(*) as count FROM tenant_users WHERE tenant_id = $1',

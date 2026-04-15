@@ -2,6 +2,7 @@ import * as consentRepo from '../db/repositories/consent.repo.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
+import type { DeletionSummary } from '../db/repositories/user.repo.js';
 
 export interface ConsentStatus {
   hasConsented: boolean;
@@ -90,20 +91,65 @@ export async function getConsentStatus(
 }
 
 /**
- * Withdraw all consent for a user.
- * Required for BIPA/GDPR right to erasure.
+ * Withdraw all consent for a user AND immediately delete their biometric data.
+ * Consent records are preserved (BIPA/GDPR require 7-year retention).
+ * Required for GDPR Article 7(3) — withdrawal must be as easy as giving consent.
  */
 export async function withdrawConsent(
   tenantId: string,
   externalUserId: string,
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; deletionSummary?: DeletionSummary }> {
   const mapping = await tenantRepo.findTenantUser(tenantId, externalUserId);
   if (!mapping) {
     return { success: false, message: 'User not found.' };
   }
 
+  // Mark consent withdrawn first
   await consentRepo.withdrawConsent(tenantId, mapping.user_id);
-  return { success: true, message: 'Consent withdrawn. Biometric data will be deleted on request.' };
+
+  // Immediately delete all biometric data (samples, baselines, attempts)
+  // The user row and tenant mapping are removed — consent records are preserved
+  const internalUsername = tenantRepo.toInternalUsername(tenantId, externalUserId);
+  const deletionSummary = await userRepo.deleteUser(mapping.user_id, internalUsername);
+
+  // Also remove the tenant_users mapping (user no longer exists in our system)
+  await tenantRepo.deleteTenantUser(tenantId, externalUserId);
+
+  return {
+    success: true,
+    message: 'Consent withdrawn and all biometric data permanently deleted.',
+    deletionSummary,
+  };
+}
+
+/**
+ * Fully delete a user and all their biometric data.
+ * Used for explicit right-to-erasure requests (BIPA/GDPR).
+ * Consent records are preserved for 7-year legal retention.
+ */
+export async function deleteUser(
+  tenantId: string,
+  externalUserId: string,
+): Promise<{ success: boolean; message: string; deletionSummary?: DeletionSummary }> {
+  const mapping = await tenantRepo.findTenantUser(tenantId, externalUserId);
+  if (!mapping) {
+    return { success: false, message: 'User not found.' };
+  }
+
+  // Mark any active consents as withdrawn before deletion
+  await consentRepo.withdrawConsent(tenantId, mapping.user_id);
+
+  const internalUsername = tenantRepo.toInternalUsername(tenantId, externalUserId);
+  const deletionSummary = await userRepo.deleteUser(mapping.user_id, internalUsername);
+
+  // Remove the tenant_users mapping (consent records are kept, user row is gone)
+  await tenantRepo.deleteTenantUser(tenantId, externalUserId);
+
+  return {
+    success: true,
+    message: 'User and all biometric data permanently deleted. Consent records retained for compliance.',
+    deletionSummary,
+  };
 }
 
 /**
