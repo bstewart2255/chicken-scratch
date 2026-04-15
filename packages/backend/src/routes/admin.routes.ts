@@ -1,8 +1,12 @@
 import { Router } from 'express';
+import { requireAdminKey } from '../middleware/admin-auth.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as consentRepo from '../db/repositories/consent.repo.js';
 
 const router = Router();
+
+// All admin routes require X-Admin-Key header
+router.use('/api/admin', requireAdminKey);
 
 // Create a new tenant — returns the API key (only shown once)
 router.post('/api/admin/tenants', async (req, res, next) => {

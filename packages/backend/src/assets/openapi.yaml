@@ -62,8 +62,8 @@ tags:
     description: Delete users and their biometric data (right to erasure).
   - name: Admin
     description: |
-      Tenant provisioning and management. No authentication required —
-      restrict access to internal networks or a management backend.
+      Tenant provisioning and management. Requires `X-Admin-Key` header.
+      Set the `ADMIN_API_KEY` environment variable on your server to enable.
 
 # ─── Reusable components ─────────────────────────────────────────────────────
 
@@ -73,6 +73,10 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+    AdminKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
 
   schemas:
 
@@ -832,6 +836,8 @@ paths:
       summary: Create a tenant
       operationId: createTenant
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       description: |
         Create a new tenant and return its API key. **The API key is only
         shown once** — store it immediately. If lost, rotate it with
@@ -886,6 +892,8 @@ paths:
       summary: List all tenants
       operationId: listTenants
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       description: Returns all tenants with API keys masked to the first 10 characters.
       responses:
         '200':
@@ -918,6 +926,8 @@ paths:
       summary: Get tenant details
       operationId: getTenant
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       parameters:
         - name: id
           in: path
@@ -968,6 +978,8 @@ paths:
       summary: Rotate API key
       operationId: rotateApiKey
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       description: |
         Generate a new API key for the tenant. The old key is immediately
         invalidated. The new key is only shown once.
@@ -1004,6 +1016,8 @@ paths:
       summary: Deactivate a tenant
       operationId: deactivateTenant
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       description: |
         Soft-delete a tenant. All API calls using their key will immediately
         fail with `401`. User data is retained.
@@ -1038,6 +1052,8 @@ paths:
       summary: List consent records
       operationId: listConsents
       tags: [Admin]
+      security:
+        - AdminKeyAuth: []
       description: |
         Returns the full consent audit trail for all users under this tenant.
         Includes withdrawn consents. Useful for compliance audits.
