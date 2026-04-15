@@ -13,10 +13,7 @@ import type {
   Session,
 } from '@chicken-scratch/shared';
 
-// In production, VITE_API_URL points to the backend service.
-// In dev, Vite proxies /api to localhost:3003.
-const API_HOST = import.meta.env.VITE_API_URL || '';
-const BASE = `${API_HOST}/api`;
+const BASE = '/api';
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {

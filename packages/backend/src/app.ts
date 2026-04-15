@@ -88,6 +88,22 @@ export function createApp() {
     app.use('/sdk', express.static(sdkDir));
   }
 
+  // Serve frontend static files
+  // Railway runs from /app with `npm -w packages/backend`, so cwd = /app/packages/backend
+  // The frontend dist is at /app/packages/frontend/dist = ../frontend/dist relative to cwd
+  const frontendDist = path.resolve(process.cwd(), '../frontend/dist');
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+
+    // SPA catch-all — serve index.html for client-side routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/docs' || req.path === '/privacy' || req.path === '/openapi.yaml') {
+        return next();
+      }
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  }
+
   app.use(errorHandler);
 
   return app;
