@@ -89,9 +89,14 @@ export function createApp() {
   }
 
   // Serve frontend static files in production
-  // Use cwd-relative path (Railway runs from repo root)
-  const frontendDist = path.resolve(process.cwd(), 'packages/frontend/dist');
-  console.log(`Frontend dist path: ${frontendDist}, exists: ${fs.existsSync(frontendDist)}`);
+  // Try multiple paths — cwd varies depending on how the server is started
+  const candidates = [
+    path.resolve(process.cwd(), '../frontend/dist'),           // npm -w packages/backend (cwd = packages/backend)
+    path.resolve(process.cwd(), 'packages/frontend/dist'),     // cwd = repo root
+    path.resolve(__dirname, '../../frontend/dist'),             // relative to compiled dist/
+  ];
+  const frontendDist = candidates.find(p => fs.existsSync(p)) || candidates[0];
+  console.log(`Frontend dist: ${frontendDist}, exists: ${fs.existsSync(frontendDist)}, cwd: ${process.cwd()}`);
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
 
