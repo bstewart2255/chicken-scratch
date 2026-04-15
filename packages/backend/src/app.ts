@@ -42,6 +42,36 @@ export function createApp() {
     }
   });
 
+  // OpenAPI spec — raw YAML
+  app.get('/openapi.yaml', (_req, res) => {
+    const specPath = path.join(__dirname, 'assets', 'openapi.yaml');
+    if (fs.existsSync(specPath)) {
+      res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.sendFile(specPath);
+    } else {
+      res.status(404).send('OpenAPI spec not found.');
+    }
+  });
+
+  // API docs — Scalar UI (rendered from the OpenAPI spec above)
+  app.get('/docs', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!doctype html>
+<html>
+<head>
+  <title>chickenScratch API Reference</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <script id="api-reference" data-url="/openapi.yaml"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>`);
+  });
+
   app.use(healthRoutes);
   app.use(enrollmentRoutes);
   app.use(authRoutes);
