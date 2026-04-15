@@ -4,6 +4,10 @@ import { Enroll } from './pages/Enroll';
 import { Verify } from './pages/Verify';
 import { MobileSession } from './pages/MobileSession';
 import { Diagnostics } from './pages/Diagnostics';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { AdminTenants } from './pages/AdminTenants';
+import { AdminTenantDetail } from './pages/AdminTenantDetail';
+import { AdminSystem } from './pages/AdminSystem';
 
 export function App() {
   return (
@@ -19,6 +23,10 @@ export function App() {
           <Route path="/verify" element={<Verify />} />
           <Route path="/mobile/:sessionId" element={<MobileSession />} />
           <Route path="/diagnostics" element={<Diagnostics />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/tenants" element={<AdminTenants />} />
+          <Route path="/admin/tenants/:tenantId" element={<AdminTenantDetail />} />
+          <Route path="/admin/system" element={<AdminSystem />} />
         </Routes>
       </div>
     </BrowserRouter>

@@ -35,9 +35,12 @@ export function Home() {
           </button>
         </Link>
       </div>
-      <div style={{ marginTop: 24 }}>
+      <div style={{ marginTop: 24, display: 'flex', gap: 16, justifyContent: 'center' }}>
         <Link to="/diagnostics" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>
           Diagnostics Dashboard
+        </Link>
+        <Link to="/admin" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>
+          Admin Dashboard
         </Link>
       </div>
     </div>
