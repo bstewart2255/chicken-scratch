@@ -107,6 +107,48 @@ export function runForgerySimulation(username: string, trialsPerLevel: number = 
   });
 }
 
+// Demo API — no auth required
+
+export function createDemoSession(): Promise<any> {
+  return request('/demo/session', { method: 'POST' });
+}
+
+export function createDemoVerifySession(username: string, enrollSessionId: string): Promise<any> {
+  return request('/demo/verify-session', {
+    method: 'POST',
+    body: JSON.stringify({ username, enrollSessionId }),
+  });
+}
+
+export function demoEnroll(username: string, signatureData: any, sessionId?: string): Promise<any> {
+  return request('/demo/enroll', {
+    method: 'POST',
+    body: JSON.stringify({ username, signatureData, sessionId }),
+  });
+}
+
+export function demoEnrollShape(username: string, shapeType: string, signatureData: any): Promise<any> {
+  return request('/demo/enroll/shape', {
+    method: 'POST',
+    body: JSON.stringify({ username, shapeType, signatureData }),
+  });
+}
+
+export function demoVerify(body: {
+  username: string;
+  signatureData: any;
+  shapes: { shapeType: string; signatureData: any }[];
+  challengeId: string;
+  durationMs?: number;
+  stepDurations?: { step: string; durationMs: number }[];
+}): Promise<{ success: boolean; authenticated: boolean; message: string }> {
+  return request('/demo/verify', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function getDemoEnrollmentStatus(username: string): Promise<any> {
+  return request(`/demo/enroll/${encodeURIComponent(username)}/status`);
+}
+
 // Admin API — requires ADMIN_API_KEY
 // In dev, the key is read from localStorage for convenience
 

@@ -64,6 +64,13 @@ export const THRESHOLDS = {
   RATE_VERIFY_MAX: 60,     // max verify calls per window
   RATE_ENROLL_MAX: 30,     // max enroll calls per window
   RATE_WINDOW_MS: 60_000,  // 1-minute rolling window
+
+  // Demo mode (reduced requirements for landing page try-it-out)
+  DEMO_ENROLLMENT_SAMPLES: 1,
+  DEMO_SESSION_TTL_MS: 10 * 60 * 1000, // 10 minutes
 } as const;
+
+/** Demo challenge types: 1 shape + 1 drawing */
+export const DEMO_CHALLENGE_TYPES = ['circle', 'house'] as const;
 
 export type Thresholds = typeof THRESHOLDS;

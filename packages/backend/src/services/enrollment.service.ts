@@ -1,5 +1,5 @@
 import type { RawSignatureData, AllFeatures, MLFeatureVector, EnrollmentResponse, ChallengeItemType } from '@chicken-scratch/shared';
-import { THRESHOLDS, ALL_CHALLENGE_TYPES, isDrawingType } from '@chicken-scratch/shared';
+import { THRESHOLDS, DEMO_CHALLENGE_TYPES, ALL_CHALLENGE_TYPES, isDrawingType } from '@chicken-scratch/shared';
 import { extractAllFeatures } from '../features/extraction/index.js';
 import { extractMLFeatures } from '../features/comparison/ml-features.js';
 import { extractShapeSpecificFeatures } from '../features/extraction/shape.js';
@@ -115,6 +115,46 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
 }
 
 /**
+ * Default standard deviations for single-sample demo baselines.
+ * Without these, a 1-sample baseline would have stddev=0 for everything,
+ * making verification impossibly strict. These values represent reasonable
+ * variance from typical enrollment data.
+ */
+function getDefaultStdDevs(): Record<string, number> {
+  return {
+    'timing.pauseDetection': 0.15,
+    'timing.rhythmConsistency': 0.1,
+    'timing.tempoVariation': 0.12,
+    'timing.dwellTimePatterns': 0.1,
+    'timing.interStrokeTiming': 0.15,
+    'timing.drawingDurationTotal': 0.2,
+    'timing.pauseTimeRatio': 0.1,
+    'timing.avgStrokeDuration': 0.15,
+    'geometric.strokeComplexity': 0.1,
+    'geometric.tremorIndex': 0.08,
+    'geometric.smoothnessIndex': 0.1,
+    'geometric.directionChanges': 0.12,
+    'geometric.curvatureAnalysis': 0.1,
+    'geometric.spatialEfficiency': 0.08,
+    'geometric.aspectRatio': 0.1,
+    'geometric.centerOfMassX': 0.15,
+    'geometric.centerOfMassY': 0.15,
+    'security.speedAnomalyScore': 0.1,
+    'security.pressureAnomalyScore': 0.1,
+    'security.directionConsistency': 0.1,
+    'security.velocitySmoothing': 0.12,
+    'pressure.avgPressure': 0.1,
+    'pressure.maxPressure': 0.1,
+    'pressure.minPressure': 0.08,
+    'pressure.pressureStd': 0.08,
+    'pressure.pressureRange': 0.1,
+    'pressure.contactTimeRatio': 0.08,
+    'pressure.pressureBuildupRate': 0.1,
+    'pressure.pressureReleaseRate': 0.1,
+  };
+}
+
+/**
  * Validate that a signature sample meets minimum quality requirements.
  * Returns an error message string if rejected, or null if OK.
  */
@@ -151,6 +191,7 @@ function validateSignatureQuality(signatureData: RawSignatureData): string | nul
 export async function enrollSample(
   username: string,
   signatureData: RawSignatureData,
+  isDemo: boolean = false,
 ): Promise<EnrollmentResponse> {
   // Find or create user
   let user = await userRepo.findByUsername(username);
@@ -169,8 +210,10 @@ export async function enrollSample(
     };
   }
 
+  const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
+
   const currentCount = await sigRepo.getSampleCount(user.id);
-  if (currentCount >= THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
+  if (currentCount >= samplesRequired) {
     return {
       success: false,
       userId: user.id,
@@ -188,7 +231,7 @@ export async function enrollSample(
       success: false,
       userId: user.id,
       sampleNumber: currentCount,
-      samplesRemaining: THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED - currentCount,
+      samplesRemaining: samplesRequired - currentCount,
       enrolled: false,
       message: qualityError,
     };
@@ -209,17 +252,20 @@ export async function enrollSample(
     signatureData.deviceCapabilities,
   );
 
-  const samplesRemaining = THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED - sampleNumber;
+  const samplesRemaining = samplesRequired - sampleNumber;
 
   // If all samples collected, compute and store baseline
-  if (sampleNumber === THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
+  if (sampleNumber === samplesRequired) {
     const samples = await sigRepo.getSamples(user.id);
     const allFeatureSets = samples.map(s => JSON.parse(s.features) as AllFeatures);
     const allMLSets = samples.map(s => JSON.parse(s.ml_features) as MLFeatureVector);
 
     const avgFeatures = averageFeatures(allFeatureSets);
     const avgML = averageMLFeatures(allMLSets);
-    const featureStdDevs = computeStdDevs(allFeatureSets);
+    // For demo (single sample), use default stddevs to avoid zero-tolerance scoring
+    const featureStdDevs = isDemo && samples.length === 1
+      ? getDefaultStdDevs()
+      : computeStdDevs(allFeatureSets);
 
     await sigRepo.upsertBaseline(
       user.id,
@@ -255,14 +301,16 @@ export async function enrollShape(
   username: string,
   shapeType: ChallengeItemType,
   signatureData: RawSignatureData,
+  isDemo: boolean = false,
 ): Promise<{ success: boolean; message: string }> {
   const user = await userRepo.findByUsername(username);
   if (!user) {
     return { success: false, message: 'User not found. Please enroll your signature first.' };
   }
 
+  const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
   const sigCount = await sigRepo.getSampleCount(user.id);
-  if (sigCount < THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
+  if (sigCount < samplesRequired) {
     return { success: false, message: 'Please complete signature enrollment first.' };
   }
 
@@ -302,16 +350,19 @@ export async function enrollShape(
   };
 }
 
-export async function getEnrollmentStatus(username: string) {
+export async function getEnrollmentStatus(username: string, isDemo: boolean = false) {
+  const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
+  const shapesRequired = isDemo ? [...DEMO_CHALLENGE_TYPES] as string[] : ALL_CHALLENGE_TYPES as string[];
+
   const user = await userRepo.findByUsername(username);
   if (!user) {
     return {
       username,
       enrolled: false,
       samplesCollected: 0,
-      samplesRequired: THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED,
+      samplesRequired,
       shapesEnrolled: [] as string[],
-      shapesRequired: ALL_CHALLENGE_TYPES as string[],
+      shapesRequired,
     };
   }
 
@@ -324,8 +375,8 @@ export async function getEnrollmentStatus(username: string) {
     username,
     enrolled: !!user.enrolled,
     samplesCollected: sampleCount,
-    samplesRequired: THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED,
+    samplesRequired,
     shapesEnrolled: shapeSamples.map(s => s.shape_type),
-    shapesRequired: ALL_CHALLENGE_TYPES as string[],
+    shapesRequired,
   };
 }

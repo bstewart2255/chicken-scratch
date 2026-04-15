@@ -1,6 +1,9 @@
-import { THRESHOLDS, ALL_CHALLENGE_TYPES } from '@chicken-scratch/shared';
+import crypto from 'crypto';
+import { THRESHOLDS, DEMO_CHALLENGE_TYPES, ALL_CHALLENGE_TYPES } from '@chicken-scratch/shared';
 import type { SessionType, CreateSessionResponse, ChallengeResponse } from '@chicken-scratch/shared';
 import * as sessionRepo from '../db/repositories/session.repo.js';
+import * as userRepo from '../db/repositories/user.repo.js';
+import { query as dbQuery } from '../db/connection.js';
 import { networkInterfaces } from 'os';
 
 function getLanIp(): string {
@@ -13,6 +16,12 @@ function getLanIp(): string {
     }
   }
   return 'localhost';
+}
+
+/** Get the public base URL for QR codes. Uses PUBLIC_URL env var in production. */
+function getBaseUrl(): string {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL;
+  return `http://${getLanIp()}:5173`;
 }
 
 /** Fisher-Yates shuffle — returns a new shuffled array */
@@ -35,8 +44,7 @@ export async function createSession(
   const expiresAt = new Date(Date.now() + THRESHOLDS.SESSION_TTL_MS).toISOString();
   const session = await sessionRepo.createSession(username, type, expiresAt, shapeOrder);
 
-  const lanIp = getLanIp();
-  const url = `http://${lanIp}:5173/mobile/${session.id}`;
+  const url = `${getBaseUrl()}/mobile/${session.id}`;
 
   return {
     sessionId: session.id,
@@ -102,9 +110,96 @@ export async function getSession(id: string) {
     status: session.status,
     shapeOrder: JSON.parse(session.shape_order) as string[],
     result: session.result ? JSON.parse(session.result) : null,
+    isDemo: session.is_demo,
     createdAt: session.created_at,
     expiresAt: new Date(session.expires_at).toISOString(),
   };
+}
+
+// ── Demo Mode ──────────────────────────────────────────────
+
+/**
+ * Create a demo enrollment session with auto-generated username.
+ * Uses reduced requirements (1 sig + 1 shape + 1 drawing).
+ */
+export async function createDemoSession(): Promise<CreateSessionResponse & { username: string }> {
+  await sessionRepo.expireOldSessions();
+
+  const username = `demo-${crypto.randomBytes(4).toString('hex')}`;
+  const shapeOrder = shuffle([...DEMO_CHALLENGE_TYPES]);
+  const expiresAt = new Date(Date.now() + THRESHOLDS.DEMO_SESSION_TTL_MS).toISOString();
+  const session = await sessionRepo.createSession(username, 'demo_enroll', expiresAt, shapeOrder, true);
+
+  const url = `${getBaseUrl()}/demo/${session.id}`;
+
+  return {
+    sessionId: session.id,
+    url,
+    shapeOrder,
+    expiresAt: new Date(session.expires_at).toISOString(),
+    isDemo: true,
+    username,
+  };
+}
+
+/**
+ * Create a demo verification session after enrollment is complete.
+ */
+export async function createDemoVerifySession(
+  username: string,
+  enrollSessionId: string,
+): Promise<CreateSessionResponse> {
+  const enrollSession = await sessionRepo.getSession(enrollSessionId);
+  if (!enrollSession) throw new Error('Enrollment session not found.');
+  if (enrollSession.status !== 'completed') throw new Error('Enrollment not yet completed.');
+  if (!enrollSession.is_demo) throw new Error('Not a demo session.');
+
+  // Use the same shape order as enrollment
+  const shapeOrder = JSON.parse(enrollSession.shape_order) as string[];
+  const expiresAt = new Date(Date.now() + THRESHOLDS.DEMO_SESSION_TTL_MS).toISOString();
+  const session = await sessionRepo.createSession(username, 'demo_verify', expiresAt, shapeOrder, true);
+
+  return {
+    sessionId: session.id,
+    url: `${getBaseUrl()}/demo/${session.id}`,
+    shapeOrder,
+    expiresAt: new Date(session.expires_at).toISOString(),
+    isDemo: true,
+    username,
+  };
+}
+
+/**
+ * Clean up demo users whose sessions have expired or completed.
+ * Deletes all biometric data for demo users.
+ */
+export async function cleanupDemoUsers(): Promise<number> {
+  // Find demo usernames with only expired/completed sessions
+  const result = await dbQuery<{ username: string }>(
+    `SELECT DISTINCT username FROM sessions
+     WHERE is_demo = TRUE
+     AND status IN ('expired', 'completed')
+     AND username LIKE 'demo-%'
+     AND username NOT IN (
+       SELECT username FROM sessions
+       WHERE is_demo = TRUE AND status IN ('pending', 'in_progress')
+     )`,
+  );
+
+  let cleaned = 0;
+  for (const row of result.rows) {
+    try {
+      // Find the user by internal username
+      const user = await userRepo.findByUsername(row.username);
+      if (user) {
+        await userRepo.deleteUser(user.id, row.username);
+        cleaned++;
+      }
+    } catch {
+      // User may already be deleted
+    }
+  }
+  return cleaned;
 }
 
 export async function updateSessionStatus(id: string, status: 'pending' | 'in_progress' | 'completed' | 'expired') {

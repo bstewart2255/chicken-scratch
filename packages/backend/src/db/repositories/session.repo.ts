@@ -9,6 +9,7 @@ export interface SessionRow {
   status: string;
   shape_order: string;
   result: string | null;
+  is_demo: boolean;
   created_at: string;
   expires_at: Date;
 }
@@ -18,13 +19,14 @@ export async function createSession(
   type: SessionType,
   expiresAt: string,
   shapeOrder: string[],
+  isDemo: boolean = false,
 ): Promise<SessionRow> {
   const id = uuid();
   const result = await query<SessionRow>(`
-    INSERT INTO sessions (id, username, type, status, shape_order, expires_at)
-    VALUES ($1, $2, $3, 'pending', $4, $5)
+    INSERT INTO sessions (id, username, type, status, shape_order, expires_at, is_demo)
+    VALUES ($1, $2, $3, 'pending', $4, $5, $6)
     RETURNING *
-  `, [id, username, type, JSON.stringify(shapeOrder), expiresAt]);
+  `, [id, username, type, JSON.stringify(shapeOrder), expiresAt, isDemo]);
   return result.rows[0];
 }
 

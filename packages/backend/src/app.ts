@@ -11,6 +11,7 @@ import sessionRoutes from './routes/session.routes.js';
 import diagnosticsRoutes from './routes/diagnostics.routes.js';
 import tenantApiRoutes from './routes/tenant-api.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import demoRoutes from './routes/demo.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -111,6 +112,7 @@ export function createApp() {
   app.use(diagnosticsRoutes);
   app.use(tenantApiRoutes);
   app.use(adminRoutes);
+  app.use(demoRoutes);
 
   // Serve SDK dist as a static asset (for <script> tag integration)
   const sdkDir = path.resolve(process.cwd(), '../sdk');

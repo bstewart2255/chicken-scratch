@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { createDemoSession, getSession } from '../api/client';
 
 function NavBar() {
   return (
@@ -261,7 +262,72 @@ function Features() {
 }
 
 function LiveDemo() {
-  const [mode, setMode] = useState<'enroll' | 'verify'>('enroll');
+  const [state, setState] = useState<'idle' | 'loading' | 'qr' | 'polling' | 'done' | 'error'>('idle');
+  const [demoUrl, setDemoUrl] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [error, setError] = useState('');
+  const [isMobile] = useState(() => 'ontouchstart' in window || window.innerWidth < 768);
+  const pollRef = useRef<number | null>(null);
+  const [sessionResult, setSessionResult] = useState<any>(null);
+
+  const startDemo = async () => {
+    setState('loading');
+    try {
+      const result = await createDemoSession();
+      setDemoUrl(result.url);
+      setSessionId(result.sessionId);
+
+      if (isMobile) {
+        // On mobile, navigate directly
+        window.location.href = result.url;
+      } else {
+        setState('qr');
+        // Start polling for session completion
+        startPolling(result.sessionId);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+      setState('error');
+    }
+  };
+
+  const startPolling = (sid: string) => {
+    const poll = () => {
+      getSession(sid)
+        .then(session => {
+          if (!session) { setState('error'); setError('Session not found.'); return; }
+          if (session.status === 'completed') {
+            setSessionResult(session.result);
+            // Now poll for verify session completion
+            // The mobile page handles creating the verify session
+            // Keep polling to detect the final result
+            if (session.result?.authenticated !== undefined) {
+              setState('done');
+              if (pollRef.current) clearInterval(pollRef.current);
+            }
+          } else if (session.status === 'expired') {
+            setState('error');
+            setError('Session expired. Try again.');
+            if (pollRef.current) clearInterval(pollRef.current);
+          }
+        })
+        .catch(() => {});
+    };
+    pollRef.current = window.setInterval(poll, 2000);
+  };
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  const reset = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    setState('idle');
+    setDemoUrl('');
+    setSessionId('');
+    setError('');
+    setSessionResult(null);
+  };
 
   return (
     <section id="demo" style={{
@@ -273,37 +339,8 @@ function LiveDemo() {
           Try It Yourself
         </h2>
         <p style={{ color: '#999', fontSize: 16, marginBottom: 32 }}>
-          Experience the enrollment and verification flow firsthand.
+          Experience enrollment and verification in under 60 seconds.
         </p>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 24 }}>
-          <button
-            onClick={() => setMode('enroll')}
-            style={{
-              padding: '10px 24px',
-              fontSize: 14,
-              fontWeight: mode === 'enroll' ? 600 : 400,
-              background: mode === 'enroll' ? '#1a1a2e' : '#fff',
-              color: mode === 'enroll' ? '#fff' : '#666',
-              border: '1px solid #e5e7eb',
-              borderRadius: 6,
-              cursor: 'pointer',
-            }}
-          >Enroll</button>
-          <button
-            onClick={() => setMode('verify')}
-            style={{
-              padding: '10px 24px',
-              fontSize: 14,
-              fontWeight: mode === 'verify' ? 600 : 400,
-              background: mode === 'verify' ? '#1a1a2e' : '#fff',
-              color: mode === 'verify' ? '#fff' : '#666',
-              border: '1px solid #e5e7eb',
-              borderRadius: 6,
-              cursor: 'pointer',
-            }}
-          >Verify</button>
-        </div>
 
         <div style={{
           background: '#fff',
@@ -316,29 +353,106 @@ function LiveDemo() {
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <p style={{ color: '#666', fontSize: 15, marginBottom: 20 }}>
-            {mode === 'enroll'
-              ? 'Sign up with your signature and drawing patterns to create a biometric profile.'
-              : 'Already enrolled? Verify your identity by signing again.'}
-          </p>
-          <Link to={mode === 'enroll' ? '/app/enroll' : '/app/verify'}>
-            <button style={{
-              padding: '12px 32px',
-              fontSize: 16,
-              fontWeight: 600,
-              background: '#6366f1',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}>
-              {mode === 'enroll' ? 'Start Enrollment' : 'Start Verification'}
-            </button>
-          </Link>
-          <p style={{ color: '#bbb', fontSize: 12, marginTop: 16 }}>
-            This demo uses a shared test environment. No real data is stored.
-          </p>
+          {state === 'idle' && (
+            <>
+              <p style={{ color: '#666', fontSize: 15, marginBottom: 8 }}>
+                {isMobile
+                  ? 'Sign your name, draw a circle, and draw a house to create your biometric profile. Then verify.'
+                  : 'Scan the QR code with your phone to start the demo.'}
+              </p>
+              <p style={{ color: '#999', fontSize: 13, marginBottom: 20 }}>
+                3 quick steps: signature, circle, house &mdash; then verify.
+              </p>
+              <button onClick={startDemo} style={{
+                padding: '14px 36px', fontSize: 16, fontWeight: 600,
+                background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+              }}>
+                Try the Demo
+              </button>
+            </>
+          )}
+
+          {state === 'loading' && (
+            <p style={{ color: '#999' }}>Setting up your demo...</p>
+          )}
+
+          {state === 'qr' && (
+            <>
+              <p style={{ color: '#666', fontSize: 15, marginBottom: 16 }}>
+                Scan this QR code with your phone:
+              </p>
+              <div style={{
+                padding: 16,
+                background: '#fff',
+                border: '2px solid #e5e7eb',
+                borderRadius: 12,
+                marginBottom: 16,
+              }}>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(demoUrl)}`}
+                  alt="QR Code"
+                  style={{ width: 200, height: 200, display: 'block' }}
+                />
+              </div>
+              <p style={{ color: '#999', fontSize: 12, marginBottom: 8 }}>
+                Or open this link on your phone:
+              </p>
+              <code style={{
+                fontSize: 11, background: '#f3f4f6', padding: '4px 8px', borderRadius: 4,
+                wordBreak: 'break-all', display: 'block', maxWidth: 400,
+              }}>
+                {demoUrl}
+              </code>
+              <div style={{
+                marginTop: 20, padding: 12, background: '#f0f0f5', borderRadius: 8,
+                color: '#666', fontSize: 13,
+              }}>
+                &#8987; Waiting for you to complete the demo on your phone...
+              </div>
+              <button onClick={reset} style={{
+                marginTop: 12, padding: '6px 16px', fontSize: 12,
+                background: '#fff', color: '#999', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer',
+              }}>Cancel</button>
+            </>
+          )}
+
+          {state === 'done' && (
+            <>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>
+                {sessionResult?.authenticated ? '\u2705' : '\u274C'}
+              </div>
+              <h3 style={{
+                color: sessionResult?.authenticated ? '#16a34a' : '#dc2626',
+                fontSize: 24, fontWeight: 700, marginBottom: 8,
+              }}>
+                {sessionResult?.authenticated ? 'Verified!' : 'Verification Failed'}
+              </h3>
+              <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+                {sessionResult?.authenticated
+                  ? 'Your drawing patterns matched your biometric profile.'
+                  : 'The drawing patterns didn\'t match closely enough. Try again!'}
+              </p>
+              <button onClick={reset} style={{
+                padding: '10px 24px', fontSize: 14, fontWeight: 600,
+                background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+              }}>Try Again</button>
+            </>
+          )}
+
+          {state === 'error' && (
+            <>
+              <p style={{ color: '#dc2626', marginBottom: 16 }}>{error}</p>
+              <button onClick={reset} style={{
+                padding: '10px 24px', fontSize: 14,
+                background: '#fff', color: '#666', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer',
+              }}>Try Again</button>
+            </>
+          )}
         </div>
+
+        <p style={{ color: '#bbb', fontSize: 12, marginTop: 12 }}>
+          Demo data is automatically deleted after 10 minutes.
+        </p>
       </div>
     </section>
   );
