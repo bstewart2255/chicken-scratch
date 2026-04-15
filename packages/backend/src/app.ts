@@ -88,28 +88,6 @@ export function createApp() {
     app.use('/sdk', express.static(sdkDir));
   }
 
-  // Serve frontend static files in production
-  // Try multiple paths — cwd varies depending on how the server is started
-  const candidates = [
-    path.resolve(process.cwd(), '../frontend/dist'),           // npm -w packages/backend (cwd = packages/backend)
-    path.resolve(process.cwd(), 'packages/frontend/dist'),     // cwd = repo root
-    path.resolve(__dirname, '../../frontend/dist'),             // relative to compiled dist/
-  ];
-  const frontendDist = candidates.find(p => fs.existsSync(p)) || candidates[0];
-  console.log(`Frontend dist: ${frontendDist}, exists: ${fs.existsSync(frontendDist)}, cwd: ${process.cwd()}`);
-  if (fs.existsSync(frontendDist)) {
-    app.use(express.static(frontendDist));
-
-    // SPA catch-all: serve index.html for any non-API route
-    app.get('*', (req, res, next) => {
-      // Don't catch API routes or other known paths
-      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/docs' || req.path === '/privacy' || req.path === '/openapi.yaml') {
-        return next();
-      }
-      res.sendFile(path.join(frontendDist, 'index.html'));
-    });
-  }
-
   app.use(errorHandler);
 
   return app;
