@@ -27,16 +27,42 @@ npm install @chicken-scratch/sdk
 import { ChickenScratch } from '@chicken-scratch/sdk';
 ```
 
-## 3. Embed the Widget
+## 3. Get an SDK Token (Recommended)
 
-Add a container div and initialize the SDK:
+Your **backend server** requests a short-lived SDK token for each user session. This keeps your API key on your server — never exposed in the browser.
+
+```js
+// YOUR BACKEND (Node.js example)
+app.get('/api/auth-token', async (req, res) => {
+  const userId = req.user.id; // your authenticated user
+
+  const response = await fetch('https://chicken-scratch-production.up.railway.app/api/v1/sdk-token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': 'cs_live_your_api_key', // stored in env, never sent to browser
+    },
+    body: JSON.stringify({ externalUserId: userId }),
+  });
+
+  const { token } = await response.json();
+  res.json({ token }); // send the short-lived token to your frontend
+});
+```
+
+## 4. Embed the Widget
+
+Your **frontend** fetches the token from your backend, then initializes the SDK:
 
 ```html
 <div id="auth-container" style="width: 500px; height: 600px;"></div>
 
 <script>
+// Fetch a short-lived token from your backend
+const { token } = await fetch('/api/auth-token').then(r => r.json());
+
 const cs = new ChickenScratch({
-  apiKey: 'cs_live_your_key_here',
+  apiKey: token,  // cs_sdk_... token (expires in 15 min)
   baseUrl: 'https://chicken-scratch-production.up.railway.app',
   container: '#auth-container',
   onComplete: (result) => {
@@ -49,10 +75,13 @@ const cs = new ChickenScratch({
   },
   onError: (error) => {
     console.error('Auth error:', error.message);
+    // If token expired, fetch a new one and reinitialize
   }
 });
 </script>
 ```
+
+> **Quick testing:** For development/testing, you can pass your API key (`cs_live_...`) directly instead of an SDK token. Don't do this in production — the key would be visible to anyone viewing your page source.
 
 ## 4. Enrollment (First Time)
 

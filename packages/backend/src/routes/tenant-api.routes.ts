@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireApiKey } from '../middleware/api-key-auth.js';
+import { sdkTokenAuth } from '../middleware/sdk-token-auth.js';
 import { validate } from '../middleware/validate.js';
 import { verifyRateLimit, enrollRateLimit } from '../middleware/rate-limit.js';
 import { TenantEnrollRequestSchema, TenantShapeEnrollRequestSchema, TenantVerifyFullRequestSchema, TenantChallengeRequestSchema } from './tenant-api.schemas.js';
@@ -8,14 +9,55 @@ import { verifyFull } from '../services/auth.service.js';
 import { createChallenge } from '../services/session.service.js';
 import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, deleteUser } from '../services/consent.service.js';
 import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
+import { createSdkToken } from '../services/sdk-token.service.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
 
 const router = Router();
 
-// All /api/v1/ routes require API key
-router.use('/api/v1', requireApiKey);
+// All /api/v1/ routes accept either:
+// 1. API key (X-API-Key or Authorization: Bearer cs_live_...) — for server-to-server
+// 2. SDK token (Authorization: Bearer cs_sdk_...) — for browser SDK
+// SDK token auth runs first; if not an SDK token, falls through to API key auth
+router.use('/api/v1', sdkTokenAuth, (req, res, next) => {
+  // If SDK token already authenticated, skip API key check
+  if (req.tenant) return next();
+  // Otherwise, require API key
+  requireApiKey(req, res, next);
+});
+
+// ─── SDK Token ───────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/sdk-token
+ * Issue a short-lived JWT for browser SDK use.
+ * Called by the customer's BACKEND (authenticated with API key, not from browser).
+ * The token is scoped to a specific tenant + externalUserId and expires in 15 minutes.
+ */
+router.post('/api/v1/sdk-token', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const { externalUserId } = req.body;
+
+    if (!externalUserId || typeof externalUserId !== 'string') {
+      res.status(400).json({ success: false, error: 'externalUserId is required.' });
+      return;
+    }
+
+    const result = createSdkToken(tenant.id, externalUserId);
+
+    res.json({
+      success: true,
+      token: `cs_sdk_${result.token}`, // Prefix so middleware can distinguish from API keys
+      externalUserId,
+      expiresIn: result.expiresIn,
+      expiresAt: result.expiresAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * Resolve externalUserId to internal username.

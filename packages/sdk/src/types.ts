@@ -1,4 +1,12 @@
 export interface ChickenScratchOptions {
+  /**
+   * Authentication credential. Either:
+   * - An API key (cs_live_...) — for testing/dev only, exposed in browser
+   * - An SDK token (cs_sdk_...) — recommended for production, short-lived JWT
+   *
+   * To get an SDK token, call POST /api/v1/sdk-token from your backend
+   * with your API key, then pass the token to the SDK.
+   */
   apiKey: string;
   baseUrl: string;
   container: string | HTMLElement;

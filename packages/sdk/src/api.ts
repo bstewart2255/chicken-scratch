@@ -7,10 +7,15 @@ export class ApiClient {
   ) {}
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
+    // SDK tokens use Authorization: Bearer, API keys use X-API-Key
+    const authHeaders: Record<string, string> = this.apiKey.startsWith('cs_sdk_')
+      ? { 'Authorization': `Bearer ${this.apiKey}` }
+      : { 'X-API-Key': this.apiKey };
+
     const res = await fetch(`${this.baseUrl}${path}`, {
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey,
+        ...authHeaders,
       },
       ...options,
     });
