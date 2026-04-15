@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAdminKey } from '../middleware/admin-auth.js';
+import { adminRateLimit } from '../middleware/rate-limit.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as apiKeyRepo from '../db/repositories/api-key.repo.js';
 import * as usageRepo from '../db/repositories/usage.repo.js';
@@ -8,8 +9,8 @@ import * as userRepo from '../db/repositories/user.repo.js';
 
 const router = Router();
 
-// All admin routes require admin key
-router.use('/api/admin', requireAdminKey);
+// All admin routes require admin key + rate limiting
+router.use('/api/admin', adminRateLimit, requireAdminKey);
 
 // ── Dashboard ────────────────────────────────────────────
 

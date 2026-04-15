@@ -43,8 +43,13 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
       if (!apiKey) {
         // Fallback: check legacy plaintext api_key column on tenants table
         // (for keys created before migration 014)
+        // DEPRECATED: Legacy plaintext keys will stop working in a future release.
         const legacyTenant = await tenantRepo.findByApiKey(rawKey!);
         if (legacyTenant) {
+          console.warn(
+            `DEPRECATED: Tenant "${legacyTenant.name}" (${legacyTenant.id}) used a legacy plaintext API key. ` +
+            'Create a new hashed key via admin API and rotate. Legacy keys will be removed in a future release.'
+          );
           req.tenant = legacyTenant;
           next();
           return;

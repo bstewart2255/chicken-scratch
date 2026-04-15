@@ -63,3 +63,9 @@ export const enrollRateLimit = createRateLimiter(
   THRESHOLDS.RATE_ENROLL_MAX,
   THRESHOLDS.RATE_WINDOW_MS,
 );
+
+// Admin rate limit — keyed by IP, tighter window to prevent brute-force
+export const adminRateLimit = createRateLimiter(
+  30,    // 30 requests per window
+  60000, // 1 minute
+);

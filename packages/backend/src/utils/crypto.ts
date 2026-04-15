@@ -15,7 +15,13 @@ let encryptionKey: Buffer | null = null;
 export function initEncryption(): void {
   const keyHex = process.env.ENCRYPTION_KEY;
   if (!keyHex) {
-    console.warn('ENCRYPTION_KEY not set — biometric data will be stored unencrypted.');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'ENCRYPTION_KEY is required in production. Biometric data must be encrypted at rest.\n' +
+        'Generate a key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+      );
+    }
+    console.warn('ENCRYPTION_KEY not set — biometric data will be stored unencrypted. (OK for development)');
     encryptionKey = null;
     return;
   }

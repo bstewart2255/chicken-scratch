@@ -29,9 +29,11 @@ export function createApp() {
       },
     },
   }));
-  // CORS: restrict to allowed origins in production
+  // CORS: restrict to allowed origins
   // Set ALLOWED_ORIGINS env var as comma-separated list (e.g., "https://example.com,https://app.example.com")
-  // If not set, allows all origins (dev mode)
+  // In production, CORS is restricted to self (same origin) if ALLOWED_ORIGINS not set.
+  // In development, all origins are allowed for convenience.
+  const isProduction = process.env.NODE_ENV === 'production';
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : null;
@@ -46,7 +48,16 @@ export function createApp() {
             callback(new Error('Not allowed by CORS'));
           }
         }
-      : true,
+      : isProduction
+        ? (origin, callback) => {
+            // Production without explicit whitelist: allow same-origin only
+            if (!origin) {
+              callback(null, true); // server-to-server
+            } else {
+              callback(new Error('CORS not configured. Set ALLOWED_ORIGINS env var.'));
+            }
+          }
+        : true, // dev: allow all
     credentials: true,
   }));
   app.use(express.json({ limit: '5mb' }));
