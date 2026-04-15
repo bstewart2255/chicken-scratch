@@ -114,6 +114,40 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   return devs;
 }
 
+/**
+ * Validate that a signature sample meets minimum quality requirements.
+ * Returns an error message string if rejected, or null if OK.
+ */
+function validateSignatureQuality(signatureData: RawSignatureData): string | null {
+  const { strokes } = signatureData;
+
+  // Total point count across all strokes
+  const totalPoints = strokes.reduce((sum, s) => sum + s.points.length, 0);
+  if (totalPoints < THRESHOLDS.QUALITY_MIN_POINTS) {
+    return `Sample quality too low: only ${totalPoints} data points recorded (minimum ${THRESHOLDS.QUALITY_MIN_POINTS}). Please draw more slowly or use a larger gesture.`;
+  }
+
+  // Duration check — use stroke startTime/endTime
+  const firstStart = strokes[0].startTime;
+  const lastEnd = strokes[strokes.length - 1].endTime;
+  const duration = lastEnd - firstStart;
+  if (duration < THRESHOLDS.QUALITY_MIN_DURATION_MS) {
+    return `Sample too fast: drawing completed in ${duration}ms (minimum ${THRESHOLDS.QUALITY_MIN_DURATION_MS}ms). Please draw naturally.`;
+  }
+
+  // Bounding box check
+  const allPoints = strokes.flatMap(s => s.points);
+  const xs = allPoints.map(p => p.x);
+  const ys = allPoints.map(p => p.y);
+  const bboxWidth = Math.max(...xs) - Math.min(...xs);
+  const bboxHeight = Math.max(...ys) - Math.min(...ys);
+  if (bboxWidth < THRESHOLDS.QUALITY_MIN_BBOX_PX && bboxHeight < THRESHOLDS.QUALITY_MIN_BBOX_PX) {
+    return `Sample too small: bounding box is ${Math.round(bboxWidth)}×${Math.round(bboxHeight)}px (minimum ${THRESHOLDS.QUALITY_MIN_BBOX_PX}px in at least one dimension). Please use more of the canvas.`;
+  }
+
+  return null;
+}
+
 export async function enrollSample(
   username: string,
   signatureData: RawSignatureData,
@@ -144,6 +178,19 @@ export async function enrollSample(
       samplesRemaining: 0,
       enrolled: false,
       message: 'All samples already collected. Finalizing enrollment.',
+    };
+  }
+
+  // Quality gate — reject low-quality samples before storing
+  const qualityError = validateSignatureQuality(signatureData);
+  if (qualityError) {
+    return {
+      success: false,
+      userId: user.id,
+      sampleNumber: currentCount,
+      samplesRemaining: THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED - currentCount,
+      enrolled: false,
+      message: qualityError,
     };
   }
 
@@ -217,6 +264,12 @@ export async function enrollShape(
   const sigCount = await sigRepo.getSampleCount(user.id);
   if (sigCount < THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED) {
     return { success: false, message: 'Please complete signature enrollment first.' };
+  }
+
+  // Quality gate for shapes too
+  const qualityError = validateSignatureQuality(signatureData);
+  if (qualityError) {
+    return { success: false, message: qualityError };
   }
 
   const strokes = extractStrokes(signatureData);

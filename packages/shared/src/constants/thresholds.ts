@@ -49,6 +49,21 @@ export const THRESHOLDS = {
 
   // Sessions
   SESSION_TTL_MS: 5 * 60 * 1000, // 5 minutes
+
+  // Enrollment quality gates
+  QUALITY_MIN_POINTS: 20,         // minimum total data points across all strokes
+  QUALITY_MIN_DURATION_MS: 200,   // minimum drawing duration (anti-replay/bot)
+  QUALITY_MIN_BBOX_PX: 30,        // bounding box must be at least 30px in one dimension
+
+  // Lockout
+  LOCKOUT_WINDOW_MS: 15 * 60 * 1000,   // sliding window to count failures
+  LOCKOUT_MAX_FAILURES: 5,              // failures within window before lockout
+  LOCKOUT_DURATION_MS: 30 * 60 * 1000, // how long the lockout lasts
+
+  // Rate limits (per tenant, in-memory)
+  RATE_VERIFY_MAX: 60,     // max verify calls per window
+  RATE_ENROLL_MAX: 30,     // max enroll calls per window
+  RATE_WINDOW_MS: 60_000,  // 1-minute rolling window
 } as const;
 
 export type Thresholds = typeof THRESHOLDS;

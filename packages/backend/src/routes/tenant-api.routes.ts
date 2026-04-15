@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { requireApiKey } from '../middleware/api-key-auth.js';
 import { validate } from '../middleware/validate.js';
+import { verifyRateLimit, enrollRateLimit } from '../middleware/rate-limit.js';
 import { TenantEnrollRequestSchema, TenantShapeEnrollRequestSchema, TenantVerifyFullRequestSchema, TenantChallengeRequestSchema } from './tenant-api.schemas.js';
 import { enrollSample, enrollShape, getEnrollmentStatus } from '../services/enrollment.service.js';
 import { verifyFull } from '../services/auth.service.js';
 import { createChallenge } from '../services/session.service.js';
 import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, deleteUser } from '../services/consent.service.js';
+import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
@@ -113,7 +115,7 @@ router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
 
 // ─── Enrollment ──────────────────────────────────────────────────────────────
 
-router.post('/api/v1/enroll', validate(TenantEnrollRequestSchema), async (req, res, next) => {
+router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchema), async (req, res, next) => {
   try {
     const { externalUserId, signatureData } = req.body;
     const tenant = req.tenant!;
@@ -141,7 +143,7 @@ router.post('/api/v1/enroll', validate(TenantEnrollRequestSchema), async (req, r
   }
 });
 
-router.post('/api/v1/enroll/shape', validate(TenantShapeEnrollRequestSchema), async (req, res, next) => {
+router.post('/api/v1/enroll/shape', enrollRateLimit, validate(TenantShapeEnrollRequestSchema), async (req, res, next) => {
   try {
     const { externalUserId, shapeType, signatureData } = req.body;
     const tenant = req.tenant!;
@@ -217,14 +219,26 @@ router.post('/api/v1/challenge', validate(TenantChallengeRequestSchema), async (
   }
 });
 
-router.post('/api/v1/verify', validate(TenantVerifyFullRequestSchema), async (req, res, next) => {
+router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestSchema), async (req, res, next) => {
   try {
     const { externalUserId, signatureData, shapes, challengeId, durationMs, stepDurations } = req.body;
     const tenant = req.tenant!;
 
-    const { username, exists } = await resolveUser(tenant.id, externalUserId);
-    if (!exists) {
+    const { username, userId, exists } = await resolveUser(tenant.id, externalUserId);
+    if (!exists || !userId) {
       res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    // Lockout check — must happen before running verification
+    const lockout = await checkLockout(userId);
+    if (lockout.locked) {
+      res.status(423).json({
+        success: false,
+        error: lockoutMessage(lockout),
+        lockedUntil: lockout.lockedUntil,
+        retryAfterSeconds: lockout.retryAfterSeconds,
+      });
       return;
     }
 

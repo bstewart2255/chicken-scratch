@@ -1,0 +1,3 @@
+# SDK dist is intentionally committed — it's the distributable customers reference.
+# The root .gitignore ignores all `dist` folders; this overrides that for the SDK.
+!dist
