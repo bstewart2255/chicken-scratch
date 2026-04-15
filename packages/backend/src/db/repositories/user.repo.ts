@@ -72,6 +72,9 @@ export async function deleteUser(
     const sessionsDeleted = await del(
       'DELETE FROM sessions WHERE username = $1', [internalUsername]);
 
+    // Remove tenant mappings before deleting user row (tenant_users FK)
+    await client.query('DELETE FROM tenant_users WHERE user_id = $1', [userId]);
+
     // Delete the user row last (FK cascade will null out consents.user_id)
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
 
