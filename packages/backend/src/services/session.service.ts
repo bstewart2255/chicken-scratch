@@ -42,7 +42,7 @@ export async function createSession(
     sessionId: session.id,
     url,
     shapeOrder,
-    expiresAt: session.expires_at,
+    expiresAt: new Date(session.expires_at).toISOString(),
   };
 }
 
@@ -59,7 +59,7 @@ export async function createChallenge(username: string): Promise<ChallengeRespon
   return {
     challengeId: session.id,
     shapeOrder,
-    expiresAt: session.expires_at,
+    expiresAt: new Date(session.expires_at).toISOString(),
   };
 }
 
@@ -103,7 +103,7 @@ export async function getSession(id: string) {
     shapeOrder: JSON.parse(session.shape_order) as string[],
     result: session.result ? JSON.parse(session.result) : null,
     createdAt: session.created_at,
-    expiresAt: session.expires_at,
+    expiresAt: new Date(session.expires_at).toISOString(),
   };
 }
 

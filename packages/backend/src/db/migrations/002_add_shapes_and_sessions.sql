@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'expired')),
   result TEXT,                          -- JSON (result data, null until completed)
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at TEXT NOT NULL
+  expires_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_shape_samples_user ON shape_samples(user_id);

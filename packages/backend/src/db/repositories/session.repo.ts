@@ -10,7 +10,7 @@ export interface SessionRow {
   shape_order: string;
   result: string | null;
   created_at: string;
-  expires_at: string;
+  expires_at: Date;
 }
 
 export async function createSession(
