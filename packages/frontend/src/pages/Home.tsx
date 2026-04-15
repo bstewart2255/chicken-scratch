@@ -8,7 +8,7 @@ export function Home() {
         Biometric signature authentication
       </p>
       <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
-        <Link to="/enroll">
+        <Link to="/app/enroll">
           <button style={{
             padding: '12px 32px',
             fontSize: 16,
@@ -21,7 +21,7 @@ export function Home() {
             Enroll
           </button>
         </Link>
-        <Link to="/verify">
+        <Link to="/app/verify">
           <button style={{
             padding: '12px 32px',
             fontSize: 16,

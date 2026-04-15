@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
 import { Enroll } from './pages/Enroll';
 import { Verify } from './pages/Verify';
@@ -18,9 +19,10 @@ export function App() {
         background: '#fafafa',
       }}>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/enroll" element={<Enroll />} />
-          <Route path="/verify" element={<Verify />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/app" element={<Home />} />
+          <Route path="/app/enroll" element={<Enroll />} />
+          <Route path="/app/verify" element={<Verify />} />
           <Route path="/mobile/:sessionId" element={<MobileSession />} />
           <Route path="/diagnostics" element={<Diagnostics />} />
           <Route path="/admin" element={<AdminDashboard />} />
