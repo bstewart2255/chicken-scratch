@@ -19,6 +19,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp() {
   const app = express();
 
+  // Serve frontend static files BEFORE Helmet/CORS — they don't need security headers
+  const frontendDist = path.resolve(process.cwd(), '../frontend/dist');
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+  }
+
+  // Serve SDK dist as a static asset
+  const sdkDir = path.resolve(process.cwd(), '../sdk');
+  if (fs.existsSync(sdkDir)) {
+    app.use('/sdk', express.static(sdkDir, {
+      maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0,
+    }));
+  }
+
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -121,22 +135,8 @@ export function createApp() {
   app.use(adminRoutes);
   app.use(demoRoutes);
 
-  // Serve SDK dist as a static asset (for <script> tag integration)
-  const sdkDir = path.resolve(process.cwd(), '../sdk');
-  if (fs.existsSync(sdkDir)) {
-    app.use('/sdk', express.static(sdkDir, {
-      maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0,
-    }));
-  }
-
-  // Serve frontend static files
-  // Railway runs from /app with `npm -w packages/backend`, so cwd = /app/packages/backend
-  // The frontend dist is at /app/packages/frontend/dist = ../frontend/dist relative to cwd
-  const frontendDist = path.resolve(process.cwd(), '../frontend/dist');
+  // SPA catch-all — serve index.html for client-side routes (uses frontendDist from top of function)
   if (fs.existsSync(frontendDist)) {
-    app.use(express.static(frontendDist));
-
-    // SPA catch-all — serve index.html for client-side routes
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/docs' || req.path === '/privacy' || req.path === '/openapi.yaml') {
         return next();
