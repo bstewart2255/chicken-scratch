@@ -9,9 +9,10 @@ const router = Router();
 // ── Demo Session ─────────────────────────────────────────
 
 /** Create a demo enrollment session (no auth required) */
-router.post('/api/demo/session', async (_req, res, next) => {
+router.post('/api/demo/session', async (req, res, next) => {
   try {
-    const result = await createDemoSession();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await createDemoSession(baseUrl);
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -26,7 +27,8 @@ router.post('/api/demo/verify-session', async (req, res, next) => {
       res.status(400).json({ error: 'username and enrollSessionId required.' });
       return;
     }
-    const result = await createDemoVerifySession(username, enrollSessionId);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await createDemoVerifySession(username, enrollSessionId, baseUrl);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });

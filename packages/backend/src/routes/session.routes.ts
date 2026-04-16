@@ -8,7 +8,8 @@ const router = Router();
 router.post('/api/session', validate(CreateSessionRequestSchema), async (req, res, next) => {
   try {
     const { username, type } = req.body;
-    const result = await sessionService.createSession(username, type);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await sessionService.createSession(username, type, baseUrl);
     res.json(result);
   } catch (err) {
     next(err);

@@ -18,8 +18,22 @@ function getLanIp(): string {
   return 'localhost';
 }
 
-/** Get the public base URL for QR codes. Uses PUBLIC_URL env var in production. */
-function getBaseUrl(): string {
+/**
+ * Get the public base URL for QR codes. Priority:
+ *   1. Explicit baseUrl arg (route handler passes req-derived `${protocol}://${host}`)
+ *   2. PUBLIC_URL env var (if set)
+ *   3. LAN IP on Vite dev port (local-dev fallback so a phone on the same WiFi
+ *      can reach the frontend dev server)
+ *
+ * The request-derived form is preferred because it works out of the box on
+ * Railway/any host without env-var configuration. The localhost filter keeps
+ * local dev working: Vite's proxy uses changeOrigin, so the backend sees
+ * Host: localhost:3003 — useless for a phone — and we fall through to LAN IP.
+ */
+function getBaseUrl(reqBaseUrl?: string): string {
+  if (reqBaseUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(reqBaseUrl)) {
+    return reqBaseUrl;
+  }
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL;
   return `http://${getLanIp()}:5173`;
 }
@@ -37,6 +51,7 @@ function shuffle<T>(arr: T[]): T[] {
 export async function createSession(
   username: string,
   type: SessionType,
+  reqBaseUrl?: string,
 ): Promise<CreateSessionResponse> {
   await sessionRepo.expireOldSessions();
 
@@ -44,7 +59,7 @@ export async function createSession(
   const expiresAt = new Date(Date.now() + THRESHOLDS.SESSION_TTL_MS).toISOString();
   const session = await sessionRepo.createSession(username, type, expiresAt, shapeOrder);
 
-  const url = `${getBaseUrl()}/mobile/${session.id}`;
+  const url = `${getBaseUrl(reqBaseUrl)}/mobile/${session.id}`;
 
   return {
     sessionId: session.id,
@@ -122,7 +137,7 @@ export async function getSession(id: string) {
  * Create a demo enrollment session with auto-generated username.
  * Uses reduced requirements (1 sig + 1 shape + 1 drawing).
  */
-export async function createDemoSession(): Promise<CreateSessionResponse & { username: string }> {
+export async function createDemoSession(reqBaseUrl?: string): Promise<CreateSessionResponse & { username: string }> {
   await sessionRepo.expireOldSessions();
 
   const username = `demo-${crypto.randomBytes(4).toString('hex')}`;
@@ -130,7 +145,7 @@ export async function createDemoSession(): Promise<CreateSessionResponse & { use
   const expiresAt = new Date(Date.now() + THRESHOLDS.DEMO_SESSION_TTL_MS).toISOString();
   const session = await sessionRepo.createSession(username, 'demo_enroll', expiresAt, shapeOrder, true);
 
-  const url = `${getBaseUrl()}/demo/${session.id}`;
+  const url = `${getBaseUrl(reqBaseUrl)}/demo/${session.id}`;
 
   return {
     sessionId: session.id,
@@ -148,6 +163,7 @@ export async function createDemoSession(): Promise<CreateSessionResponse & { use
 export async function createDemoVerifySession(
   username: string,
   enrollSessionId: string,
+  reqBaseUrl?: string,
 ): Promise<CreateSessionResponse> {
   const enrollSession = await sessionRepo.getSession(enrollSessionId);
   if (!enrollSession) throw new Error('Enrollment session not found.');
@@ -161,7 +177,7 @@ export async function createDemoVerifySession(
 
   return {
     sessionId: session.id,
-    url: `${getBaseUrl()}/demo/${session.id}`,
+    url: `${getBaseUrl(reqBaseUrl)}/demo/${session.id}`,
     shapeOrder,
     expiresAt: new Date(session.expires_at).toISOString(),
     isDemo: true,
