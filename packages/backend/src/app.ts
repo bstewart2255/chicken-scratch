@@ -37,15 +37,21 @@ export function createApp() {
   // In production, CORS is restricted to self (same origin) if ALLOWED_ORIGINS not set.
   // In development, all origins are allowed for convenience.
   const isProduction = process.env.NODE_ENV === 'production';
+  const publicUrl = process.env.PUBLIC_URL || '';
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : null;
 
+  // Build the full list: explicit ALLOWED_ORIGINS + PUBLIC_URL (self)
+  const allAllowed = new Set<string>();
+  if (allowedOrigins) allowedOrigins.forEach(o => allAllowed.add(o));
+  if (publicUrl) allAllowed.add(publicUrl);
+
   app.use(cors({
-    origin: allowedOrigins
+    origin: allAllowed.size > 0
       ? (origin, callback) => {
           // Allow requests with no origin (server-to-server, curl, etc.)
-          if (!origin || allowedOrigins.includes(origin)) {
+          if (!origin || allAllowed.has(origin)) {
             callback(null, true);
           } else {
             callback(new Error('Not allowed by CORS'));
@@ -53,11 +59,10 @@ export function createApp() {
         }
       : isProduction
         ? (origin, callback) => {
-            // Production without explicit whitelist: allow same-origin only
             if (!origin) {
-              callback(null, true); // server-to-server
+              callback(null, true);
             } else {
-              callback(new Error('CORS not configured. Set ALLOWED_ORIGINS env var.'));
+              callback(new Error('CORS not configured. Set ALLOWED_ORIGINS or PUBLIC_URL env var.'));
             }
           }
         : true, // dev: allow all
