@@ -141,7 +141,15 @@ export function demoVerify(body: {
   challengeId: string;
   durationMs?: number;
   stepDurations?: { step: string; durationMs: number }[];
-}): Promise<{ success: boolean; authenticated: boolean; message: string }> {
+}): Promise<{
+  success: boolean;
+  authenticated: boolean;
+  message: string;
+  scoreBreakdown?: {
+    signature: number;
+    shapes: { type: string; score: number }[];
+  };
+}> {
   return request('/demo/verify', { method: 'POST', body: JSON.stringify(body) });
 }
 

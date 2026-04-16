@@ -109,12 +109,25 @@ router.post('/api/demo/verify', async (req, res, next) => {
       (durationMs || stepDurations) ? { durationMs, stepDurations } : undefined,
     );
 
+    // Demo-only: include per-component match percentages so visitors can see
+    // *which* biometric signals matched. Safe because demo accounts are
+    // random + ephemeral (10-min TTL). Deliberately excludes finalScore and
+    // threshold — those are the exploitable leakage vectors. Never surface
+    // these on the tenant API (/api/v1/verify).
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
     res.json({
       success: result.success,
       authenticated: result.authenticated,
       message: result.authenticated
         ? 'Identity verified successfully!'
         : 'Verification failed. Your drawing patterns didn\'t match closely enough.',
+      scoreBreakdown: result.success ? {
+        signature: clamp(result.signatureScore),
+        shapes: result.shapeScores.map(s => ({
+          type: s.shapeType,
+          score: clamp(s.combinedScore),
+        })),
+      } : undefined,
     });
   } catch (err) {
     next(err);
