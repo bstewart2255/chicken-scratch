@@ -57,29 +57,34 @@ export function createApp() {
     : null;
 
   // Build the full list: explicit ALLOWED_ORIGINS + PUBLIC_URL (self)
+  // Normalize: trim whitespace and remove trailing slashes
   const allAllowed = new Set<string>();
-  if (allowedOrigins) allowedOrigins.forEach(o => allAllowed.add(o));
-  if (publicUrl) allAllowed.add(publicUrl);
+  if (allowedOrigins) allowedOrigins.forEach(o => allAllowed.add(o.replace(/\/+$/, '')));
+  if (publicUrl) allAllowed.add(publicUrl.trim().replace(/\/+$/, ''));
+
+  console.log(`CORS allowed origins: [${[...allAllowed].join(', ')}] (PUBLIC_URL=${publicUrl}, NODE_ENV=${process.env.NODE_ENV})`);
 
   app.use(cors({
-    origin: allAllowed.size > 0
-      ? (origin, callback) => {
-          // Allow requests with no origin (server-to-server, curl, etc.)
-          if (!origin || allAllowed.has(origin)) {
-            callback(null, true);
-          } else {
-            callback(new Error('Not allowed by CORS'));
-          }
-        }
-      : isProduction
-        ? (origin, callback) => {
-            if (!origin) {
-              callback(null, true);
-            } else {
-              callback(new Error('CORS not configured. Set ALLOWED_ORIGINS or PUBLIC_URL env var.'));
-            }
-          }
-        : true, // dev: allow all
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, etc.)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      // If we have an explicit allowlist, check it
+      if (allAllowed.size > 0 && allAllowed.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      // Dev mode: allow all
+      if (!isProduction) {
+        callback(null, true);
+        return;
+      }
+      // Production with no match
+      console.warn(`CORS rejected origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   }));
   app.use(express.json({ limit: '5mb' }));
