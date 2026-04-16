@@ -19,6 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp() {
   const app = express();
 
+  // Behind Railway/Fastly: respect X-Forwarded-Proto so req.protocol is 'https'.
+  app.set('trust proxy', true);
+
   // Serve frontend static files BEFORE Helmet/CORS — they don't need security headers
   const frontendDist = path.resolve(process.cwd(), '../frontend/dist');
   if (fs.existsSync(frontendDist)) {
@@ -46,9 +49,10 @@ export function createApp() {
     crossOriginResourcePolicy: { policy: 'same-site' },
     crossOriginEmbedderPolicy: false,
   }));
-  // CORS: restrict to allowed origins
-  // Set ALLOWED_ORIGINS env var as comma-separated list (e.g., "https://example.com,https://app.example.com")
-  // In production, CORS is restricted to self (same origin) if ALLOWED_ORIGINS not set.
+  // CORS: allow the request's own host (self-origin) automatically, plus any
+  // origins listed in ALLOWED_ORIGINS / PUBLIC_URL. This means the frontend
+  // hitting its own backend works without any env-var configuration; env vars
+  // are only needed to allow *third-party* origins (e.g., customer SDK hosts).
   // In development, all origins are allowed for convenience.
   const isProduction = process.env.NODE_ENV === 'production';
   const publicUrl = process.env.PUBLIC_URL || '';
@@ -56,37 +60,39 @@ export function createApp() {
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : null;
 
-  // Build the full list: explicit ALLOWED_ORIGINS + PUBLIC_URL (self)
-  // Normalize: trim whitespace and remove trailing slashes
   const allAllowed = new Set<string>();
   if (allowedOrigins) allowedOrigins.forEach(o => allAllowed.add(o.replace(/\/+$/, '')));
   if (publicUrl) allAllowed.add(publicUrl.trim().replace(/\/+$/, ''));
 
-  console.log(`CORS allowed origins: [${[...allAllowed].join(', ')}] (PUBLIC_URL=${publicUrl}, NODE_ENV=${process.env.NODE_ENV})`);
+  console.log(`CORS config: explicit allowlist=[${[...allAllowed].join(', ')}] (PUBLIC_URL=${publicUrl}, NODE_ENV=${process.env.NODE_ENV}); self-origin auto-allowed.`);
 
-  app.use(cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, etc.)
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      // If we have an explicit allowlist, check it
-      if (allAllowed.size > 0 && allAllowed.has(origin)) {
-        callback(null, true);
-        return;
-      }
-      // Dev mode: allow all
-      if (!isProduction) {
-        callback(null, true);
-        return;
-      }
-      // Production with no match
-      console.warn(`CORS rejected origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  }));
+  app.use((req, res, next) => {
+    const selfOrigin = `${req.protocol}://${req.get('host')}`;
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+        const normalized = origin.replace(/\/+$/, '');
+        if (normalized === selfOrigin) {
+          callback(null, true);
+          return;
+        }
+        if (allAllowed.has(normalized)) {
+          callback(null, true);
+          return;
+        }
+        if (!isProduction) {
+          callback(null, true);
+          return;
+        }
+        console.warn(`CORS rejected origin: ${origin} (self=${selfOrigin}, allowed=[${[...allAllowed].join(', ')}])`);
+        callback(new Error('Not allowed by CORS'));
+      },
+      credentials: true,
+    })(req, res, next);
+  });
   app.use(express.json({ limit: '5mb' }));
 
   // Privacy policy — served as static HTML, no auth required
