@@ -25,10 +25,12 @@ export function createApp() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: ["'self'"],
-        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'", "https://api.qrserver.com"],
+        imgSrc: ["'self'", "data:", "https://api.qrserver.com"],
       },
     },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    crossOriginEmbedderPolicy: false,
   }));
   // CORS: restrict to allowed origins
   // Set ALLOWED_ORIGINS env var as comma-separated list (e.g., "https://example.com,https://app.example.com")
