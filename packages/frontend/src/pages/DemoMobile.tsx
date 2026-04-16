@@ -259,7 +259,7 @@ export function DemoMobile() {
     return (
       <div style={containerStyle}>
         <div style={{ textAlign: 'center', marginTop: 40 }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>{passed ? '&#9989;' : '&#10060;'}</div>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>{passed ? '\u2705' : '\u274C'}</div>
           <h2 style={{ color: passed ? '#16a34a' : '#dc2626', marginBottom: 8 }}>
             {passed ? 'Verified!' : 'Verification Failed'}
           </h2>
