@@ -1,34 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
 import { createDemoSession, getSession } from '../api/client';
 
+// Project convention is inline styles, not a CSS file — this keeps responsive
+// adaptations in the same style. Returns true on touch devices or narrow
+// viewports; components thread it into conditional font sizes / padding / grids.
+function useIsMobile(breakpoint = 768): boolean {
+  const check = () => 'ontouchstart' in window || window.innerWidth < breakpoint;
+  const [isMobile, setIsMobile] = useState(check);
+  useEffect(() => {
+    const onResize = () => setIsMobile(check());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+}
+
 function NavBar() {
+  const isMobile = useIsMobile();
   return (
     <nav style={{
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '16px 40px',
+      padding: isMobile ? '14px 20px' : '16px 40px',
       maxWidth: 1200,
       margin: '0 auto',
+      flexWrap: 'wrap',
+      gap: 12,
     }}>
-      <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e', letterSpacing: -0.5 }}>
+      <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#1a1a2e', letterSpacing: -0.5 }}>
         chickenScratch
       </div>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Try It</a>
-        <a href="#how-it-works" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>How It Works</a>
-        <a href="#use-cases" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Use Cases</a>
-        <a href="#get-started" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Pilot</a>
+      <div style={{ display: 'flex', gap: isMobile ? 14 : 24, alignItems: 'center', flexWrap: 'wrap' }}>
+        <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Try It</a>
+        <a href="#how-it-works" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>How It Works</a>
+        <a href="#use-cases" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Use Cases</a>
+        <a href="#get-started" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Pilot</a>
       </div>
     </nav>
   );
 }
 
 function Hero() {
+  const isMobile = useIsMobile();
   return (
     <section style={{
       textAlign: 'center',
-      padding: '80px 40px 60px',
+      padding: isMobile ? '48px 20px 40px' : '80px 40px 60px',
       maxWidth: 800,
       margin: '0 auto',
     }}>
@@ -39,36 +57,41 @@ function Hero() {
         borderRadius: 20,
         fontSize: 13,
         color: '#666',
-        marginBottom: 24,
+        marginBottom: isMobile ? 16 : 24,
       }}>
         Behavioral biometric authentication
       </div>
       <h1 style={{
-        fontSize: 52,
+        fontSize: isMobile ? 34 : 52,
         fontWeight: 800,
         color: '#1a1a2e',
         lineHeight: 1.1,
-        marginBottom: 20,
+        marginBottom: isMobile ? 16 : 20,
         letterSpacing: -1,
       }}>
         Know it&rsquo;s really them &mdash;<br />
         <span style={{ color: '#6366f1' }}>by how they draw.</span>
       </h1>
       <p style={{
-        fontSize: 18,
+        fontSize: isMobile ? 16 : 18,
         color: '#666',
         lineHeight: 1.6,
         maxWidth: 560,
-        margin: '0 auto 36px',
+        margin: isMobile ? '0 auto 28px' : '0 auto 36px',
       }}>
         Your users sign their name and draw a couple of shapes. chickenScratch verifies
         them from the unique way they do it &mdash; speed, pressure, timing, stroke order.
         No passwords to forget. No SMS codes to phish. Just draw.
       </p>
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+      <div style={{
+        display: 'flex',
+        gap: 12,
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+      }}>
         <a href="#demo" style={{
-          padding: '14px 32px',
-          fontSize: 16,
+          padding: isMobile ? '12px 24px' : '14px 32px',
+          fontSize: isMobile ? 15 : 16,
           fontWeight: 600,
           background: '#1a1a2e',
           color: '#fff',
@@ -76,8 +99,8 @@ function Hero() {
           borderRadius: 8,
         }}>Try the Demo</a>
         <a href="#get-started" style={{
-          padding: '14px 32px',
-          fontSize: 16,
+          padding: isMobile ? '12px 24px' : '14px 32px',
+          fontSize: isMobile ? 15 : 16,
           fontWeight: 600,
           background: '#fff',
           color: '#1a1a2e',
@@ -109,19 +132,20 @@ function HowItWorks() {
     },
   ];
 
+  const isMobile = useIsMobile();
   return (
     <section id="how-it-works" style={{
-      padding: '80px 40px',
+      padding: isMobile ? '56px 20px' : '80px 40px',
       maxWidth: 1000,
       margin: '0 auto',
     }}>
-      <h2 style={{ textAlign: 'center', fontSize: 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
+      <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
         How It Works
       </h2>
-      <p style={{ textAlign: 'center', color: '#999', fontSize: 16, marginBottom: 48 }}>
+      <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
         Three steps to biometric authentication
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 32 }}>
         {steps.map(step => (
           <div key={step.num} style={{
             padding: 28,
@@ -175,19 +199,20 @@ function UseCases() {
     },
   ];
 
+  const isMobile = useIsMobile();
   return (
     <section id="use-cases" style={{
-      padding: '80px 40px',
+      padding: isMobile ? '56px 20px' : '80px 40px',
       background: '#f9fafb',
     }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-        <h2 style={{ textAlign: 'center', fontSize: 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
+        <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
           Built For
         </h2>
-        <p style={{ textAlign: 'center', color: '#999', fontSize: 16, marginBottom: 48 }}>
+        <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
           Any application where identity matters
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? 12 : 20 }}>
           {cases.map(c => (
             <div key={c.title} style={{
               padding: 24,
@@ -312,14 +337,14 @@ function LiveDemo() {
 
   return (
     <section id="demo" style={{
-      padding: '80px 40px',
+      padding: isMobile ? '56px 20px' : '80px 40px',
       background: '#f9fafb',
     }}>
       <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
-        <h2 style={{ fontSize: 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
+        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
           Try It Yourself
         </h2>
-        <p style={{ color: '#999', fontSize: 16, marginBottom: 32 }}>
+        <p style={{ color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 24 : 32 }}>
           Experience enrollment and verification in under 60 seconds.
         </p>
 
@@ -514,13 +539,14 @@ function LiveDemo() {
 }
 
 function GetStarted() {
+  const isMobile = useIsMobile();
   return (
     <section id="get-started" style={{
-      padding: '80px 40px',
+      padding: isMobile ? '56px 20px' : '80px 40px',
       textAlign: 'center',
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <h2 style={{ fontSize: 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
+        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
           Start a Pilot
         </h2>
         <p style={{ color: '#666', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
@@ -563,9 +589,10 @@ function GetStarted() {
 }
 
 function Footer() {
+  const isMobile = useIsMobile();
   return (
     <footer style={{
-      padding: '32px 40px',
+      padding: isMobile ? '24px 20px' : '32px 40px',
       borderTop: '1px solid #e5e7eb',
       textAlign: 'center',
     }}>
