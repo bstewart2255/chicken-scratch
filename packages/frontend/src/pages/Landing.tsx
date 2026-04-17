@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { createDemoSession, getSession } from '../api/client';
 
 function NavBar() {
@@ -16,18 +15,10 @@ function NavBar() {
         chickenScratch
       </div>
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+        <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Try It</a>
         <a href="#how-it-works" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>How It Works</a>
         <a href="#use-cases" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Use Cases</a>
-        <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Try It</a>
-        <a href="#get-started" style={{
-          padding: '8px 20px',
-          fontSize: 14,
-          fontWeight: 600,
-          background: '#1a1a2e',
-          color: '#fff',
-          textDecoration: 'none',
-          borderRadius: 6,
-        }}>Start a Pilot</a>
+        <a href="#get-started" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>Pilot</a>
       </div>
     </nav>
   );
@@ -105,19 +96,16 @@ function HowItWorks() {
       num: '1',
       title: 'Embed the SDK',
       desc: 'Add one script tag to your app. Our widget handles the full enrollment and verification UI.',
-      icon: '</>',
     },
     {
       num: '2',
       title: 'Users enroll',
       desc: 'Users sign their name and draw shapes 3 times. We build a biometric baseline from their unique drawing style.',
-      icon: '',
     },
     {
       num: '3',
       title: 'Verify on return',
       desc: 'When users come back, they sign again. We compare against their baseline and return pass/fail in under a second.',
-      icon: '',
     },
   ];
 
@@ -266,7 +254,7 @@ function LiveDemo() {
   const [demoUrl, setDemoUrl] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [error, setError] = useState('');
-  const [isMobile] = useState(() => 'ontouchstart' in window || window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(() => 'ontouchstart' in window || window.innerWidth < 768);
   const pollRef = useRef<number | null>(null);
   const [sessionResult, setSessionResult] = useState<any>(null);
 
@@ -319,6 +307,12 @@ function LiveDemo() {
 
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile('ontouchstart' in window || window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const reset = () => {
@@ -563,7 +557,6 @@ function Footer() {
       <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 12 }}>
         <a href="/docs" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>API Docs</a>
         <a href="/privacy" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>Privacy Policy</a>
-        <Link to="/admin" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>Admin</Link>
       </div>
       <div style={{ color: '#ccc', fontSize: 12 }}>
         chickenScratch &mdash; Behavioral biometric authentication
@@ -577,10 +570,10 @@ export function Landing() {
     <div style={{ background: '#fff' }}>
       <NavBar />
       <Hero />
+      <LiveDemo />
       <HowItWorks />
       <Features />
       <UseCases />
-      <LiveDemo />
       <GetStarted />
       <Footer />
     </div>
