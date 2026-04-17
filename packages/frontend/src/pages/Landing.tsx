@@ -213,37 +213,23 @@ function UseCases() {
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
 
-function Features() {
-  const features = [
-    { title: 'No passwords', desc: 'Biometric authentication based on drawing behavior, not memorized secrets.' },
-    { title: 'Replay-proof', desc: 'Randomized challenge order and timestamp validation prevent recorded replays.' },
-    { title: 'Sub-second verification', desc: 'Feature extraction and scoring happens in real-time on the server.' },
-    { title: 'BIPA/GDPR compliant', desc: 'Built-in consent collection, data retention policies, and right-to-erasure.' },
-    { title: 'Device fingerprinting', desc: 'Detects when verification happens on a different device than enrollment.' },
-    { title: 'Drop-in SDK', desc: 'One script tag. Handles enrollment, verification, consent, and progress UI.' },
-  ];
-
-  return (
-    <section style={{
-      padding: '80px 40px',
-      maxWidth: 1000,
-      margin: '0 auto',
-    }}>
-      <h2 style={{ textAlign: 'center', fontSize: 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 48 }}>
-        Why chickenScratch
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-        {features.map(f => (
-          <div key={f.title} style={{ padding: '4px 0' }}>
-            <h4 style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e', marginBottom: 6 }}>{f.title}</h4>
-            <p style={{ fontSize: 13, color: '#999', lineHeight: 1.5, margin: 0 }}>{f.desc}</p>
-          </div>
-        ))}
+        <div style={{
+          marginTop: 40,
+          padding: '16px 24px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          gap: '12px 28px',
+          fontSize: 13,
+          color: '#666',
+        }}>
+          <span>&middot; Replay-proof challenges</span>
+          <span>&middot; Sub-second verification</span>
+          <span>&middot; BIPA &amp; GDPR-ready</span>
+          <span>&middot; Device fingerprinting</span>
+          <span>&middot; Encryption at rest</span>
+        </div>
       </div>
     </section>
   );
@@ -601,7 +587,6 @@ export function Landing() {
       <Hero />
       <LiveDemo />
       <HowItWorks />
-      <Features />
       <UseCases />
       <GetStarted />
       <Footer />
