@@ -404,8 +404,37 @@ function LiveDemo() {
               }}>
                 &#8987; Waiting for you to complete the demo on your phone...
               </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                margin: '20px auto 12px',
+                color: '#ccc',
+                fontSize: 12,
+                maxWidth: 260,
+              }}>
+                <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+                <span>or</span>
+                <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+              </div>
+              <a
+                href={demoUrl}
+                style={{
+                  padding: '10px 24px', fontSize: 14, fontWeight: 500,
+                  background: '#fff', color: '#1a1a2e',
+                  border: '1px solid #d4d4d8', borderRadius: 6,
+                  textDecoration: 'none', cursor: 'pointer',
+                }}
+              >
+                Continue in this browser
+              </a>
+              <p style={{ color: '#bbb', fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+                You can draw with a mouse or trackpad.
+              </p>
+
               <button onClick={reset} style={{
-                marginTop: 12, padding: '6px 16px', fontSize: 12,
+                marginTop: 16, padding: '6px 16px', fontSize: 12,
                 background: '#fff', color: '#999', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer',
               }}>Cancel</button>
             </>
