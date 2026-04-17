@@ -51,9 +51,8 @@ function Hero() {
         marginBottom: 20,
         letterSpacing: -1,
       }}>
-        Verify identity by<br />
-        <span style={{ color: '#6366f1' }}>how they sign</span>,<br />
-        not what they sign.
+        Know it&rsquo;s really them &mdash;<br />
+        <span style={{ color: '#6366f1' }}>by how they draw.</span>
       </h1>
       <p style={{
         fontSize: 18,
@@ -62,8 +61,9 @@ function Hero() {
         maxWidth: 560,
         margin: '0 auto 36px',
       }}>
-        chickenScratch authenticates users based on the unique biometrics of their handwriting &mdash;
-        pressure, speed, stroke patterns, and timing. No passwords. No SMS codes. Just draw.
+        Your users sign their name and draw a couple of shapes. chickenScratch verifies
+        them from the unique way they do it &mdash; speed, pressure, timing, stroke order.
+        No passwords to forget. No SMS codes to phish. Just draw.
       </p>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
         <a href="#demo" style={{
