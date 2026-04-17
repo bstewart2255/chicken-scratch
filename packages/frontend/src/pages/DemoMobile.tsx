@@ -5,6 +5,7 @@ import { SignatureCanvas } from '../components/SignatureCanvas';
 import { ShapeCanvas } from '../components/ShapeCanvas';
 import {
   getSession,
+  createDemoSession,
   demoEnroll,
   demoEnrollShape,
   createDemoVerifySession,
@@ -81,7 +82,15 @@ export function DemoMobile() {
     getSession(sessionId)
       .then(session => {
         if (!session) { setError('Session not found.'); setPhase('error'); return; }
-        if (session.status === 'expired') { setError('Session expired. Go back and try again.'); setPhase('error'); return; }
+        if (session.status === 'expired') { setError('This demo session has expired.'); setPhase('error'); return; }
+        if (session.status === 'completed') {
+          // Reloading a finished session (back button, refresh, re-scanning an
+          // old QR) would otherwise try to re-enroll the same username and
+          // dead-end on "already enrolled". Offer a fresh start instead.
+          setError('This demo has already been completed.');
+          setPhase('error');
+          return;
+        }
         setUsername(session.username);
         setShapeOrder(session.shapeOrder);
         setEnrollSessionId(session.id);
@@ -96,6 +105,16 @@ export function DemoMobile() {
       })
       .catch(err => { setError(err.message); setPhase('error'); });
   }, [sessionId]);
+
+  const startNewDemo = async () => {
+    try {
+      const result = await createDemoSession();
+      window.location.href = result.url;
+    } catch (err) {
+      setError((err as Error).message);
+      setPhase('error');
+    }
+  };
 
   const handleSubmit = async () => {
     const pad = padRef.current;
@@ -215,12 +234,23 @@ export function DemoMobile() {
   }
 
   if (phase === 'error') {
+    const alreadyDone = /already (been )?(enrolled|completed)|expired/i.test(error);
+    const heading = alreadyDone ? 'Demo complete' : 'Something went wrong';
+    const body = alreadyDone
+      ? 'This demo has already finished. Start a fresh one to try again.'
+      : error;
     return (
       <div style={containerStyle}>
         <div style={{ textAlign: 'center', marginTop: 40 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>&#10060;</div>
-          <h2 style={{ color: '#1a1a2e', marginBottom: 8 }}>Something went wrong</h2>
-          <p style={{ color: '#999' }}>{error}</p>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>{alreadyDone ? '\u2714\uFE0F' : '\u274C'}</div>
+          <h2 style={{ color: '#1a1a2e', marginBottom: 8 }}>{heading}</h2>
+          <p style={{ color: '#999', marginBottom: 24 }}>{body}</p>
+          <button
+            onClick={startNewDemo}
+            style={{ ...btnStyle, background: '#6366f1', color: '#fff' }}
+          >
+            Start a new demo
+          </button>
         </div>
       </div>
     );
@@ -316,10 +346,10 @@ export function DemoMobile() {
               : 'Try signing more naturally, like you did during enrollment.'}
           </p>
           <button
-            onClick={() => window.close()}
+            onClick={startNewDemo}
             style={{ ...btnStyle, background: '#1a1a2e', color: '#fff', marginTop: 32 }}
           >
-            Close
+            Try another demo
           </button>
         </div>
       </div>
