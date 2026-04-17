@@ -171,6 +171,27 @@ function HowItWorks() {
           </div>
         ))}
       </div>
+
+      <div style={{
+        marginTop: isMobile ? 32 : 48,
+        aspectRatio: '16 / 9',
+        border: '2px dashed #d4d4d8',
+        borderRadius: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#bbb',
+        padding: 20,
+        textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 14, fontStyle: 'italic', marginBottom: 4 }}>
+          Demo walkthrough GIF
+        </div>
+        <div style={{ fontSize: 12 }}>
+          (screen recording of enrollment + verification flow &mdash; placeholder)
+        </div>
+      </div>
     </section>
   );
 }
@@ -212,6 +233,38 @@ function UseCases() {
         <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
           Any application where identity matters
         </p>
+
+        <div style={{
+          padding: isMobile ? 20 : 28,
+          background: '#fff',
+          border: '2px dashed #d4d4d8',
+          borderRadius: 12,
+          marginBottom: 24,
+        }}>
+          <div style={{
+            fontSize: 11,
+            color: '#999',
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+            marginBottom: 8,
+          }}>
+            Featured customer story
+          </div>
+          <h3 style={{
+            fontSize: 18,
+            fontWeight: 600,
+            color: '#1a1a2e',
+            marginBottom: 8,
+            marginTop: 0,
+          }}>
+            Coming soon
+          </h3>
+          <p style={{ fontSize: 14, color: '#999', lineHeight: 1.5, margin: 0 }}>
+            Once we have our first pilot live, we&rsquo;ll share a concrete before-and-after
+            here &mdash; the workflow, the numbers, the things we got wrong on the way.
+          </p>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? 12 : 20 }}>
           {cases.map(c => (
             <div key={c.title} style={{
@@ -538,6 +591,56 @@ function LiveDemo() {
   );
 }
 
+function SocialProof() {
+  const isMobile = useIsMobile();
+  return (
+    <section style={{
+      padding: isMobile ? '48px 20px' : '72px 40px',
+      maxWidth: 1000,
+      margin: '0 auto',
+      textAlign: 'center',
+    }}>
+      <div style={{
+        fontSize: 11,
+        color: '#999',
+        textTransform: 'uppercase',
+        letterSpacing: 1.5,
+        marginBottom: 16,
+      }}>
+        Design partners wanted
+      </div>
+      <p style={{
+        color: '#666',
+        fontSize: isMobile ? 15 : 16,
+        maxWidth: 540,
+        margin: '0 auto 32px',
+        lineHeight: 1.6,
+      }}>
+        We&rsquo;re early. Be one of our first pilot customers and help shape how
+        chickenScratch fits into your product.
+      </p>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+        gap: 12,
+      }}>
+        {[1, 2, 3].map(i => (
+          <div key={i} style={{
+            padding: '28px 16px',
+            border: '2px dashed #d4d4d8',
+            borderRadius: 10,
+            color: '#bbb',
+            fontSize: 13,
+            fontStyle: 'italic',
+          }}>
+            Your logo here
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function GetStarted() {
   const isMobile = useIsMobile();
   return (
@@ -583,6 +686,14 @@ function GetStarted() {
             }}
           >Get in Touch</a>
         </div>
+        <p style={{
+          color: '#999',
+          fontSize: 13,
+          marginTop: 20,
+          marginBottom: 0,
+        }}>
+          Free during pilot. Paid tiers <span style={{ fontStyle: 'italic' }}>TBD</span>.
+        </p>
       </div>
     </section>
   );
@@ -615,6 +726,7 @@ export function Landing() {
       <LiveDemo />
       <HowItWorks />
       <UseCases />
+      <SocialProof />
       <GetStarted />
       <Footer />
     </div>
