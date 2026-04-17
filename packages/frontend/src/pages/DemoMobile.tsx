@@ -67,6 +67,7 @@ export function DemoMobile() {
   } | null>(null);
   const [enrollSessionId, setEnrollSessionId] = useState('');
   const [verifySessionId, setVerifySessionId] = useState('');
+  const [isForgeryRound, setIsForgeryRound] = useState(false);
   const padRef = useRef<SignaturePad | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -211,6 +212,31 @@ export function DemoMobile() {
       stepDurationsRef.current = [];
       flowStartRef.current = Date.now();
       stepStartRef.current = Date.now();
+      setIsForgeryRound(false);
+      setVerifyResult(null);
+      setPhase('verify_sig');
+    } catch (err) {
+      setError((err as Error).message);
+      setPhase('error');
+    }
+  };
+
+  // Same submission flow as handleStartVerify — the backend scoring is
+  // identical. The "forgery round" label is pure framing: we prompt the
+  // user to draw intentionally differently and celebrate a rejection.
+  const handleStartForger = async () => {
+    try {
+      const session = await createDemoVerifySession(username, enrollSessionId);
+      setVerifySessionId(session.sessionId);
+      setShapeOrder(session.shapeOrder);
+      setShapeIndex(0);
+      verifySigRef.current = null;
+      verifyShapesRef.current = [];
+      stepDurationsRef.current = [];
+      flowStartRef.current = Date.now();
+      stepStartRef.current = Date.now();
+      setIsForgeryRound(true);
+      setVerifyResult(null);
       setPhase('verify_sig');
     } catch (err) {
       setError((err as Error).message);
@@ -295,7 +321,7 @@ export function DemoMobile() {
       <div style={containerStyle}>
         <div style={{ textAlign: 'center', marginTop: 40 }}>
           <div style={{ fontSize: 32, marginBottom: 16 }}>&#8987;</div>
-          <h2 style={{ color: '#1a1a2e' }}>Verifying...</h2>
+          <h2 style={{ color: '#1a1a2e' }}>{isForgeryRound ? 'Checking your forgery...' : 'Verifying...'}</h2>
           <p style={{ color: '#999' }}>Comparing your drawings against your enrolled profile.</p>
         </div>
       </div>
@@ -313,15 +339,38 @@ export function DemoMobile() {
       padding: '10px 14px',
       fontSize: 15,
     };
+
+    // Four outcomes:
+    // - normal + passed:   "Verified!" (green) — offer forger round
+    // - normal + failed:   "Verification Failed" (red)
+    // - forger + failed:   "Forgery Rejected" (green — the desired outcome)
+    // - forger + passed:   "Forgery Slipped Through" (amber — honest acknowledgment)
+    const forgeryRejected = isForgeryRound && !passed;
+    const forgerySucceeded = isForgeryRound && passed;
+    const icon = isForgeryRound
+      ? (forgeryRejected ? '\uD83D\uDEE1\uFE0F' : '\u26A0\uFE0F')
+      : (passed ? '\u2705' : '\u274C');
+    const headlineColor = forgeryRejected ? '#16a34a'
+      : forgerySucceeded ? '#d97706'
+      : passed ? '#16a34a' : '#dc2626';
+    const headline = forgeryRejected ? 'Forgery Rejected'
+      : forgerySucceeded ? 'Forgery Slipped Through'
+      : passed ? 'Verified!' : 'Verification Failed';
+    const summary = forgeryRejected
+      ? 'Your forgery attempt didn\u2019t match the enrolled biometric profile \u2014 the system correctly detected this wasn\u2019t you.'
+      : forgerySucceeded
+      ? 'Your forgery attempt was close enough to your natural style to pass. In production, more enrollment samples and tighter thresholds make this harder.'
+      : passed
+      ? 'Your drawing patterns matched your enrolled biometric profile.'
+      : 'Try signing more naturally, like you did during enrollment.';
+
     return (
       <div style={containerStyle}>
         <div style={{ textAlign: 'center', marginTop: 40 }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>{passed ? '\u2705' : '\u274C'}</div>
-          <h2 style={{ color: passed ? '#16a34a' : '#dc2626', marginBottom: 8 }}>
-            {passed ? 'Verified!' : 'Verification Failed'}
-          </h2>
-          <p style={{ color: '#666', marginBottom: 24 }}>
-            {verifyResult?.message}
+          <div style={{ fontSize: 64, marginBottom: 16 }}>{icon}</div>
+          <h2 style={{ color: headlineColor, marginBottom: 8 }}>{headline}</h2>
+          <p style={{ color: '#666', marginBottom: 24, fontSize: 14 }}>
+            {summary}
           </p>
           {breakdown && (
             <div style={{
@@ -354,16 +403,35 @@ export function DemoMobile() {
               ))}
             </div>
           )}
-          <p style={{ color: '#999', fontSize: 13 }}>
-            {passed
-              ? 'Your drawing patterns matched your enrolled biometric profile.'
-              : 'Try signing more naturally, like you did during enrollment.'}
-          </p>
+          {/* Primary CTA: offer forger round after a legitimate verify pass; */}
+          {/* otherwise offer another forger attempt or a fresh demo. */}
+          {!isForgeryRound && passed && (
+            <button
+              onClick={handleStartForger}
+              style={{ ...btnStyle, background: '#6366f1', color: '#fff' }}
+            >
+              Now try to forge yourself
+            </button>
+          )}
+          {isForgeryRound && (
+            <button
+              onClick={handleStartForger}
+              style={{ ...btnStyle, background: '#6366f1', color: '#fff' }}
+            >
+              Try forging again
+            </button>
+          )}
           <button
             onClick={startNewDemo}
-            style={{ ...btnStyle, background: '#1a1a2e', color: '#fff', marginTop: 32 }}
+            style={{
+              ...btnStyle,
+              background: (!isForgeryRound && passed) || isForgeryRound ? '#fff' : '#1a1a2e',
+              color: (!isForgeryRound && passed) || isForgeryRound ? '#666' : '#fff',
+              border: (!isForgeryRound && passed) || isForgeryRound ? '1px solid #e5e7eb' : 'none',
+              marginTop: 8,
+            }}
           >
-            Try another demo
+            Start a fresh demo
           </button>
         </div>
       </div>
@@ -380,16 +448,35 @@ export function DemoMobile() {
 
   if (phase === 'enroll_sig') { stepLabel = 'Sign your name'; stepNum = 1; }
   else if (phase === 'enroll_shape') { stepLabel = SHAPE_LABELS[shapeOrder[shapeIndex]] || shapeOrder[shapeIndex]; stepNum = 2 + shapeIndex; }
-  else if (phase === 'verify_sig') { stepLabel = 'Sign your name again'; stepNum = 1; }
-  else if (phase === 'verify_shape') { stepLabel = SHAPE_LABELS[shapeOrder[shapeIndex]] || shapeOrder[shapeIndex]; stepNum = 2 + shapeIndex; }
+  else if (phase === 'verify_sig') {
+    stepLabel = isForgeryRound ? 'Try to forge your own signature' : 'Sign your name again';
+    stepNum = 1;
+  }
+  else if (phase === 'verify_shape') {
+    const label = SHAPE_LABELS[shapeOrder[shapeIndex]] || shapeOrder[shapeIndex];
+    stepLabel = isForgeryRound ? label.replace(/^Draw/i, 'Forge') : label;
+    stepNum = 2 + shapeIndex;
+  }
+
+  const headerLabel = isEnroll
+    ? 'Demo Enrollment'
+    : isForgeryRound
+    ? 'Forgery Attempt'
+    : 'Demo Verification';
 
   return (
     <div style={containerStyle}>
       <div style={headerStyle}>
-        <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
-          {isEnroll ? 'Demo Enrollment' : 'Demo Verification'} &mdash; Step {stepNum} of {totalSteps}
+        <div style={{ fontSize: 11, color: isForgeryRound ? '#d97706' : '#999', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+          {headerLabel} &mdash; Step {stepNum} of {totalSteps}
         </div>
         <h2 style={{ fontSize: 20, color: '#1a1a2e', margin: '0 0 4px' }}>{stepLabel}</h2>
+        {isForgeryRound && stepNum === 1 && (
+          <p style={{ fontSize: 13, color: '#666', margin: '8px 0 0', lineHeight: 1.4 }}>
+            Draw differently than you did during enrollment &mdash; use your other hand,
+            scribble, or imitate a stranger&rsquo;s style. Let&rsquo;s see if the system catches you.
+          </p>
+        )}
         {/* Progress bar */}
         <div style={{ height: 3, background: '#e5e7eb', borderRadius: 2, marginTop: 8 }}>
           <div style={{
@@ -420,7 +507,7 @@ export function DemoMobile() {
         onClick={handleSubmit}
         style={{ ...btnStyle, background: '#6366f1', color: '#fff' }}
       >
-        {stepNum < totalSteps ? 'Next' : isEnroll ? 'Complete Enrollment' : 'Verify'}
+        {stepNum < totalSteps ? 'Next' : isEnroll ? 'Complete Enrollment' : isForgeryRound ? 'Submit forgery' : 'Verify'}
       </button>
     </div>
   );
