@@ -178,6 +178,20 @@ export function DemoMobile() {
           });
           setVerifyResult(result);
           setPhase('result');
+          // Write the verify outcome back to the enroll session so the
+          // desktop landing page's poller can transition to its "done" state.
+          await fetch(`/api/session/${enrollSessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'completed',
+              result: {
+                enrolled: true,
+                authenticated: result.authenticated,
+                scoreBreakdown: result.scoreBreakdown,
+              },
+            }),
+          }).catch(() => { /* best-effort; desktop handoff is a bonus */ });
         }
       }
     } catch (err) {

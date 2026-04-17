@@ -417,28 +417,73 @@ function LiveDemo() {
             </>
           )}
 
-          {state === 'done' && (
-            <>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>
-                {sessionResult?.authenticated ? '\u2705' : '\u274C'}
-              </div>
-              <h3 style={{
-                color: sessionResult?.authenticated ? '#16a34a' : '#dc2626',
-                fontSize: 24, fontWeight: 700, marginBottom: 8,
-              }}>
-                {sessionResult?.authenticated ? 'Verified!' : 'Verification Failed'}
-              </h3>
-              <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
-                {sessionResult?.authenticated
-                  ? 'Your drawing patterns matched your biometric profile.'
-                  : 'The drawing patterns didn\'t match closely enough. Try again!'}
-              </p>
-              <button onClick={reset} style={{
-                padding: '10px 24px', fontSize: 14, fontWeight: 600,
-                background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
-              }}>Try Again</button>
-            </>
-          )}
+          {state === 'done' && (() => {
+            const breakdown = sessionResult?.scoreBreakdown as
+              | { signature: number; shapes: { type: string; score: number }[] }
+              | undefined;
+            const shapeLabel = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+            const rowStyle = {
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 14px',
+              fontSize: 14,
+            };
+            return (
+              <>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>
+                  {sessionResult?.authenticated ? '\u2705' : '\u274C'}
+                </div>
+                <h3 style={{
+                  color: sessionResult?.authenticated ? '#16a34a' : '#dc2626',
+                  fontSize: 24, fontWeight: 700, marginBottom: 8,
+                }}>
+                  {sessionResult?.authenticated ? 'Verified!' : 'Verification Failed'}
+                </h3>
+                <p style={{ color: '#666', fontSize: 14, marginBottom: 16 }}>
+                  {sessionResult?.authenticated
+                    ? 'Your drawing patterns matched your biometric profile.'
+                    : 'The drawing patterns didn\'t match closely enough. Try again!'}
+                </p>
+                {breakdown && (
+                  <div style={{
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 10,
+                    margin: '0 auto 20px',
+                    width: 280,
+                    overflow: 'hidden',
+                    textAlign: 'left',
+                  }}>
+                    <div style={{ ...rowStyle, borderBottom: '1px solid #e5e7eb' }}>
+                      <span style={{ color: '#1a1a2e', fontWeight: 500 }}>Signature</span>
+                      <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                        {breakdown.signature}%
+                      </span>
+                    </div>
+                    {breakdown.shapes.map((s, i) => (
+                      <div
+                        key={s.type}
+                        style={{
+                          ...rowStyle,
+                          borderBottom: i < breakdown.shapes.length - 1 ? '1px solid #e5e7eb' : 'none',
+                        }}
+                      >
+                        <span style={{ color: '#1a1a2e', fontWeight: 500 }}>{shapeLabel(s.type)}</span>
+                        <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                          {s.score}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button onClick={reset} style={{
+                  padding: '10px 24px', fontSize: 14, fontWeight: 600,
+                  background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+                }}>Try Again</button>
+              </>
+            );
+          })()}
 
           {state === 'error' && (
             <>
