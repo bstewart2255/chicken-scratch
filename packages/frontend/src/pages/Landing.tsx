@@ -34,13 +34,30 @@ function NavBar() {
       gap: 12,
     }}>
       <div style={{
-        fontFamily: HAND,
-        fontSize: isMobile ? 26 : 30,
-        fontWeight: 700,
-        color: '#1a1a2e',
-        lineHeight: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
       }}>
-        chickenScratch
+        <div style={{
+          fontFamily: HAND,
+          fontSize: isMobile ? 26 : 30,
+          fontWeight: 700,
+          color: '#1a1a2e',
+          lineHeight: 1,
+        }}>
+          chickenScratch
+        </div>
+        <div style={{
+          padding: '3px 12px',
+          background: '#f0f0f5',
+          borderRadius: 20,
+          fontSize: isMobile ? 10 : 11,
+          color: '#666',
+          whiteSpace: 'nowrap',
+        }}>
+          Behavioral biometric authentication
+        </div>
       </div>
       <div style={{ display: 'flex', gap: isMobile ? 14 : 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Try It</a>
@@ -61,17 +78,6 @@ function Hero() {
       maxWidth: 800,
       margin: '0 auto',
     }}>
-      <div style={{
-        display: 'inline-block',
-        padding: '4px 14px',
-        background: '#f0f0f5',
-        borderRadius: 20,
-        fontSize: 13,
-        color: '#666',
-        marginBottom: isMobile ? 16 : 24,
-      }}>
-        Behavioral biometric authentication
-      </div>
       <h1 style={{
         fontSize: isMobile ? 34 : 52,
         fontWeight: 800,
