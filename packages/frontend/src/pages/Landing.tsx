@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { createDemoSession, getSession } from '../api/client';
 
+// Handwritten display face — loaded from Google Fonts in index.html. Applied
+// sparingly: the wordmark and one accent phrase in the hero. Keeps the rest
+// of the page in the system sans so it doesn't feel gimmicky.
+const HAND = '"Caveat", "Bradley Hand", cursive';
+
 // Project convention is inline styles, not a CSS file — this keeps responsive
 // adaptations in the same style. Returns true on touch devices or narrow
 // viewports; components thread it into conditional font sizes / padding / grids.
@@ -28,7 +33,13 @@ function NavBar() {
       flexWrap: 'wrap',
       gap: 12,
     }}>
-      <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#1a1a2e', letterSpacing: -0.5 }}>
+      <div style={{
+        fontFamily: HAND,
+        fontSize: isMobile ? 26 : 30,
+        fontWeight: 700,
+        color: '#1a1a2e',
+        lineHeight: 1,
+      }}>
         chickenScratch
       </div>
       <div style={{ display: 'flex', gap: isMobile ? 14 : 24, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -70,7 +81,42 @@ function Hero() {
         letterSpacing: -1,
       }}>
         Know it&rsquo;s really them &mdash;<br />
-        <span style={{ color: '#6366f1' }}>by how they draw.</span>
+        <span style={{
+          fontFamily: HAND,
+          fontWeight: 700,
+          color: '#6366f1',
+          fontSize: isMobile ? 44 : 68,
+          lineHeight: 1,
+          position: 'relative',
+          display: 'inline-block',
+          paddingBottom: 6,
+        }}>
+          by how they draw.
+          {/* hand-drawn squiggle underline */}
+          <svg
+            viewBox="0 0 300 12"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: -6,
+              width: '100%',
+              height: isMobile ? 8 : 10,
+              overflow: 'visible',
+            }}
+          >
+            <path
+              d="M 2 6 Q 30 1, 60 5 T 120 6 T 180 5 T 240 6 T 298 5"
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              opacity="0.75"
+            />
+          </svg>
+        </span>
       </h1>
       <p style={{
         fontSize: isMobile ? 16 : 18,
@@ -711,8 +757,10 @@ function Footer() {
         <a href="/docs" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>API Docs</a>
         <a href="/privacy" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>Privacy Policy</a>
       </div>
-      <div style={{ color: '#ccc', fontSize: 12 }}>
-        chickenScratch &mdash; Behavioral biometric authentication
+      <div style={{ color: '#bbb', fontSize: 13 }}>
+        <span style={{ fontFamily: HAND, fontSize: 18, color: '#999' }}>chickenScratch</span>
+        <span style={{ margin: '0 8px' }}>&mdash;</span>
+        Behavioral biometric authentication
       </div>
     </footer>
   );
