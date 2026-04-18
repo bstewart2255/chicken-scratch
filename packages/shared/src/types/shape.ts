@@ -88,4 +88,11 @@ export interface FullVerifyResponse {
   signatureScore: number;
   shapeScores: ShapeScoreBreakdown[];
   message: string;
+  // Machine-readable error code when success=false. Customers key UX off this.
+  // DEVICE_CLASS_MISMATCH → user is on a class they haven't enrolled; client
+  // should offer "switch device" or "add this device" (see enrolledClasses).
+  errorCode?: 'DEVICE_CLASS_MISMATCH';
+  // Classes the user already has baselines for. Present with DEVICE_CLASS_MISMATCH
+  // so clients can tell the user which device(s) they can verify on.
+  enrolledClasses?: string[];
 }

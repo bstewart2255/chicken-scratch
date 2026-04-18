@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { query } from '../connection.js';
-import type { FeatureComparison, DeviceCapabilities, AllFeatures, ShapeScoreBreakdown } from '@chicken-scratch/shared';
+import type { FeatureComparison, DeviceCapabilities, AllFeatures, ShapeScoreBreakdown, DeviceClass } from '@chicken-scratch/shared';
 import type { ShapeAttemptDetail } from '@chicken-scratch/shared';
 
 export interface AuthAttemptRow {
@@ -20,6 +20,7 @@ export interface AuthAttemptRow {
   duration_ms: number | null;
   step_durations: string | null;
   is_forgery: boolean;
+  device_class: DeviceClass | null;
   created_at: string;
 }
 
@@ -39,14 +40,15 @@ export async function createAttempt(
     fingerprintMatch?: Record<string, unknown>;
     durationMs?: number;
     stepDurations?: { step: string; durationMs: number }[];
+    deviceClass?: DeviceClass;
   },
 ): Promise<AuthAttemptRow> {
   const id = uuid();
   const result = await query<AuthAttemptRow>(`
     INSERT INTO auth_attempts (id, user_id, score, threshold, authenticated, breakdown, device_capabilities,
       attempt_type, signature_features, signature_comparison, shape_scores, shape_details, fingerprint_match,
-      duration_ms, step_durations)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      duration_ms, step_durations, device_class)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING *
   `, [
     id,
@@ -64,8 +66,31 @@ export async function createAttempt(
     extra?.fingerprintMatch ? JSON.stringify(extra.fingerprintMatch) : null,
     extra?.durationMs ?? null,
     extra?.stepDurations ? JSON.stringify(extra.stepDurations) : null,
+    extra?.deviceClass ?? null,
   ]);
   return result.rows[0];
+}
+
+/**
+ * Gate for add-a-device enrollment: returns true if the user has passed a
+ * biometric verify on any existing class within the given window. An
+ * attacker who hasn't already verified as the victim can't pass this,
+ * which is what makes "add a device" safe.
+ */
+export async function hasRecentSuccessfulVerify(
+  userId: string,
+  withinMs: number,
+): Promise<boolean> {
+  const result = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM auth_attempts
+       WHERE user_id = $1
+         AND authenticated = TRUE
+         AND created_at > NOW() - ($2::text || ' milliseconds')::interval
+     ) as exists`,
+    [userId, String(withinMs)],
+  );
+  return result.rows[0]?.exists === true;
 }
 
 export async function getRecentAttempts(userId: string, limit = 10): Promise<AuthAttemptRow[]> {

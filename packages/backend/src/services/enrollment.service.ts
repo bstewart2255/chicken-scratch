@@ -1,12 +1,14 @@
-import type { RawSignatureData, AllFeatures, MLFeatureVector, EnrollmentResponse, ChallengeItemType } from '@chicken-scratch/shared';
-import { THRESHOLDS, DEMO_CHALLENGE_TYPES, ALL_CHALLENGE_TYPES, isDrawingType } from '@chicken-scratch/shared';
+import type { RawSignatureData, AllFeatures, MLFeatureVector, EnrollmentResponse, ChallengeItemType, DeviceClass } from '@chicken-scratch/shared';
+import { THRESHOLDS, DEMO_CHALLENGE_TYPES, ALL_CHALLENGE_TYPES, isDrawingType, ADD_DEVICE_RECENT_VERIFY_WINDOW_MS } from '@chicken-scratch/shared';
 import { extractAllFeatures } from '../features/extraction/index.js';
 import { extractMLFeatures } from '../features/comparison/ml-features.js';
 import { extractShapeSpecificFeatures } from '../features/extraction/shape.js';
 import { extractStrokes } from '../features/extraction/helpers/stroke-parser.js';
+import { detectDeviceClass } from '../features/device-class.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import * as sigRepo from '../db/repositories/signature.repo.js';
 import * as shapeRepo from '../db/repositories/shape.repo.js';
+import * as authAttemptRepo from '../db/repositories/auth-attempt.repo.js';
 import { mean, stddev } from '../features/extraction/helpers/math.js';
 
 /**
@@ -188,31 +190,79 @@ function validateSignatureQuality(signatureData: RawSignatureData): string | nul
   return null;
 }
 
+export interface EnrollOptions {
+  /**
+   * Customer-controlled opt-out of the recent-verify gate. Intended for
+   * flows where the customer's backend has already authenticated the user
+   * with high assurance (password + 2FA + device trust, etc.) and wants
+   * to skip our biometric-proof gate. Default false — caller must
+   * deliberately opt out.
+   */
+  skipRecentVerify?: boolean;
+}
+
 export async function enrollSample(
   username: string,
   signatureData: RawSignatureData,
   isDemo: boolean = false,
-): Promise<EnrollmentResponse> {
+  options: EnrollOptions = {},
+): Promise<EnrollmentResponse & { errorCode?: string; deviceClass?: DeviceClass; enrolledClasses?: DeviceClass[] }> {
+  const deviceClass = detectDeviceClass(signatureData);
+
   // Find or create user
   let user = await userRepo.findByUsername(username);
   if (!user) {
     user = await userRepo.createUser(username);
   }
 
-  if (user.enrolled) {
+  // Check what the user has already enrolled.
+  const enrolledClasses = await sigRepo.getEnrolledClasses(user.id);
+  const alreadyEnrolledThisClass = enrolledClasses.includes(deviceClass);
+  const hasOtherClass = enrolledClasses.length > 0 && !alreadyEnrolledThisClass;
+
+  if (alreadyEnrolledThisClass) {
+    // Same-class re-enrollment is not supported via this endpoint. A dedicated
+    // "refresh baseline" flow would delete the existing baseline first.
     return {
       success: false,
       userId: user.id,
       sampleNumber: 0,
       samplesRemaining: 0,
       enrolled: true,
-      message: 'User is already enrolled.',
+      message: `Already enrolled on ${deviceClass}.`,
+      errorCode: 'ALREADY_ENROLLED',
+      deviceClass,
+      enrolledClasses,
     };
+  }
+
+  // Adding a new class (user has other-class baselines): require a recent
+  // successful verify, unless the caller explicitly opts out. This is the
+  // primary safety gate — an attacker can't silently add their own device
+  // without biometric proof they're the legitimate user.
+  if (hasOtherClass && !options.skipRecentVerify) {
+    const recentOk = await authAttemptRepo.hasRecentSuccessfulVerify(
+      user.id,
+      ADD_DEVICE_RECENT_VERIFY_WINDOW_MS,
+    );
+    if (!recentOk) {
+      return {
+        success: false,
+        userId: user.id,
+        sampleNumber: 0,
+        samplesRemaining: 0,
+        enrolled: true,
+        message: `Adding a new device class requires a recent successful verification on an already-enrolled device.`,
+        errorCode: 'RECENT_VERIFY_REQUIRED',
+        deviceClass,
+        enrolledClasses,
+      };
+    }
   }
 
   const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
 
-  const currentCount = await sigRepo.getSampleCount(user.id);
+  const currentCount = await sigRepo.getSampleCount(user.id, deviceClass);
   if (currentCount >= samplesRequired) {
     return {
       success: false,
@@ -221,6 +271,7 @@ export async function enrollSample(
       samplesRemaining: 0,
       enrolled: false,
       message: 'All samples already collected. Finalizing enrollment.',
+      deviceClass,
     };
   }
 
@@ -234,6 +285,7 @@ export async function enrollSample(
       samplesRemaining: samplesRequired - currentCount,
       enrolled: false,
       message: qualityError,
+      deviceClass,
     };
   }
 
@@ -250,13 +302,14 @@ export async function enrollSample(
     features,
     mlFeatures,
     signatureData.deviceCapabilities,
+    deviceClass,
   );
 
   const samplesRemaining = samplesRequired - sampleNumber;
 
   // If all samples collected, compute and store baseline
   if (sampleNumber === samplesRequired) {
-    const samples = await sigRepo.getSamples(user.id);
+    const samples = await sigRepo.getSamples(user.id, deviceClass);
     const allFeatureSets = samples.map(s => JSON.parse(s.features) as AllFeatures);
     const allMLSets = samples.map(s => JSON.parse(s.ml_features) as MLFeatureVector);
 
@@ -273,6 +326,7 @@ export async function enrollSample(
       avgML,
       featureStdDevs,
       avgFeatures.metadata.hasPressureData,
+      deviceClass,
     );
 
     await userRepo.markEnrolled(user.id);
@@ -283,7 +337,9 @@ export async function enrollSample(
       sampleNumber,
       samplesRemaining: 0,
       enrolled: true,
-      message: 'Enrollment complete! Baseline computed from all samples.',
+      message: `Enrollment complete on ${deviceClass}! Baseline computed from all samples.`,
+      deviceClass,
+      enrolledClasses: [...enrolledClasses, deviceClass],
     };
   }
 
@@ -293,7 +349,8 @@ export async function enrollSample(
     sampleNumber,
     samplesRemaining,
     enrolled: false,
-    message: `Sample ${sampleNumber} of ${THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED} recorded.`,
+    message: `Sample ${sampleNumber} of ${samplesRequired} recorded.`,
+    deviceClass,
   };
 }
 
@@ -302,22 +359,31 @@ export async function enrollShape(
   shapeType: ChallengeItemType,
   signatureData: RawSignatureData,
   isDemo: boolean = false,
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; deviceClass?: DeviceClass }> {
+  const deviceClass = detectDeviceClass(signatureData);
+
   const user = await userRepo.findByUsername(username);
   if (!user) {
     return { success: false, message: 'User not found. Please enroll your signature first.' };
   }
 
+  // Signature enrollment for this class must be complete first. Shape enrollment
+  // piggybacks on the same class boundary — you enroll shapes on the class you
+  // already enrolled a signature on.
   const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
-  const sigCount = await sigRepo.getSampleCount(user.id);
+  const sigCount = await sigRepo.getSampleCount(user.id, deviceClass);
   if (sigCount < samplesRequired) {
-    return { success: false, message: 'Please complete signature enrollment first.' };
+    return {
+      success: false,
+      message: `Please complete signature enrollment on ${deviceClass} first.`,
+      deviceClass,
+    };
   }
 
   // Quality gate for shapes too
   const qualityError = validateSignatureQuality(signatureData);
   if (qualityError) {
-    return { success: false, message: qualityError };
+    return { success: false, message: qualityError, deviceClass };
   }
 
   const strokes = extractStrokes(signatureData);
@@ -331,11 +397,12 @@ export async function enrollShape(
     biometricFeatures,
     shapeFeatures,
     signatureData.deviceCapabilities,
+    deviceClass,
   );
 
-  await shapeRepo.upsertShapeBaseline(user.id, shapeType, biometricFeatures, shapeFeatures);
+  await shapeRepo.upsertShapeBaseline(user.id, shapeType, biometricFeatures, shapeFeatures, deviceClass);
 
-  const enrolledSamples = await shapeRepo.getShapeSamples(user.id);
+  const enrolledSamples = await shapeRepo.getShapeSamples(user.id, deviceClass);
   const enrolledTypes = new Set(enrolledSamples.map(s => s.shape_type));
   const allDone = ALL_CHALLENGE_TYPES.every(t => enrolledTypes.has(t));
 
@@ -347,10 +414,15 @@ export async function enrollShape(
   return {
     success: true,
     message: `${typeLabel} '${shapeType}' enrolled successfully.${allDone ? ' All complete!' : ''}`,
+    deviceClass,
   };
 }
 
-export async function getEnrollmentStatus(username: string, isDemo: boolean = false) {
+export async function getEnrollmentStatus(
+  username: string,
+  isDemo: boolean = false,
+  deviceClass?: DeviceClass,
+) {
   const samplesRequired = isDemo ? THRESHOLDS.DEMO_ENROLLMENT_SAMPLES : THRESHOLDS.ENROLLMENT_SAMPLES_REQUIRED;
   const shapesRequired = isDemo ? [...DEMO_CHALLENGE_TYPES] as string[] : ALL_CHALLENGE_TYPES as string[];
 
@@ -363,12 +435,23 @@ export async function getEnrollmentStatus(username: string, isDemo: boolean = fa
       samplesRequired,
       shapesEnrolled: [] as string[],
       shapesRequired,
+      enrolledClasses: [] as DeviceClass[],
     };
   }
 
+  const enrolledClasses = await sigRepo.getEnrolledClasses(user.id);
+
+  // If the caller wants status for a specific class, scope the per-class counts.
+  // Otherwise aggregate across classes (back-compat for callers that just want
+  // "is this user set up").
   const [sampleCount, shapeSamples] = await Promise.all([
-    sigRepo.getSampleCount(user.id),
-    shapeRepo.getShapeSamples(user.id),
+    deviceClass
+      ? sigRepo.getSampleCount(user.id, deviceClass)
+      : Promise.resolve(
+          (await Promise.all(enrolledClasses.map(c => sigRepo.getSampleCount(user.id, c))))
+            .reduce((a, b) => a + b, 0),
+        ),
+    shapeRepo.getShapeSamples(user.id, deviceClass),
   ]);
 
   return {
@@ -378,5 +461,6 @@ export async function getEnrollmentStatus(username: string, isDemo: boolean = fa
     samplesRequired,
     shapesEnrolled: shapeSamples.map(s => s.shape_type),
     shapesRequired,
+    enrolledClasses,
   };
 }

@@ -4,8 +4,17 @@ import * as userRepo from '../db/repositories/user.repo.js';
 import * as authAttemptRepo from '../db/repositories/auth-attempt.repo.js';
 import * as sigRepo from '../db/repositories/signature.repo.js';
 import * as shapeRepo from '../db/repositories/shape.repo.js';
-import type { AllFeatures, ShapeSpecificFeatures, ChallengeItemType } from '@chicken-scratch/shared';
+import type { AllFeatures, ShapeSpecificFeatures, ChallengeItemType, DeviceClass } from '@chicken-scratch/shared';
 import { runForgerySimulation } from '../services/forgery-simulator.js';
+
+/**
+ * Diagnostics reads per-class data. Callers can pass ?deviceClass=mobile or
+ * =desktop to scope the response; default is 'mobile' to match the migration
+ * backfill so existing bookmarks/links continue to work.
+ */
+function parseDeviceClass(q: unknown): DeviceClass {
+  return q === 'desktop' ? 'desktop' : 'mobile';
+}
 
 const router = Router();
 
@@ -103,9 +112,10 @@ router.get('/api/diagnostics/users/:username/baseline', async (req, res, next) =
       return;
     }
 
+    const deviceClass = parseDeviceClass(req.query.deviceClass);
     const [sigBaseline, shapeBaselines] = await Promise.all([
-      sigRepo.getBaseline(user.id),
-      shapeRepo.getShapeBaselines(user.id),
+      sigRepo.getBaseline(user.id, deviceClass),
+      shapeRepo.getShapeBaselines(user.id, deviceClass),
     ]);
 
     const result: BaselineSummary = {
@@ -175,9 +185,10 @@ router.get('/api/diagnostics/users/:username/enrollment-samples', async (req, re
       return;
     }
 
+    const deviceClass = parseDeviceClass(req.query.deviceClass);
     const [sigSamples, shapeSamples] = await Promise.all([
-      sigRepo.getSamples(user.id),
-      shapeRepo.getShapeSamples(user.id),
+      sigRepo.getSamples(user.id, deviceClass),
+      shapeRepo.getShapeSamples(user.id, deviceClass),
     ]);
 
     res.json({

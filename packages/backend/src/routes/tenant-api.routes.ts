@@ -159,7 +159,7 @@ router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
 
 router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchema), async (req, res, next) => {
   try {
-    const { externalUserId, signatureData } = req.body;
+    const { externalUserId, signatureData, skipRecentVerify } = req.body;
     const tenant = req.tenant!;
 
     // Consent gate — block enrollment if user hasn't consented
@@ -170,15 +170,31 @@ router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchem
     }
 
     const { username } = await resolveUser(tenant.id, externalUserId, true);
-    const result = await enrollSample(username, signatureData);
+    // skipRecentVerify opt-out: customer attests they've authenticated the user
+    // via their own means (password + MFA + etc.) and is bypassing our biometric
+    // add-device gate. Customer takes responsibility for that authentication.
+    const result = await enrollSample(username, signatureData, false, {
+      skipRecentVerify: skipRecentVerify === true,
+    });
 
-    res.status(result.success ? 200 : 400).json({
+    // 403 specifically for gate failures so clients can distinguish security
+    // rejection from a simple validation error.
+    const status = result.success
+      ? 200
+      : result.errorCode === 'RECENT_VERIFY_REQUIRED'
+      ? 403
+      : 400;
+
+    res.status(status).json({
       success: result.success,
       externalUserId,
       sampleNumber: result.sampleNumber,
       samplesRemaining: result.samplesRemaining,
       enrolled: result.enrolled,
       message: result.message,
+      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(result.deviceClass ? { deviceClass: result.deviceClass } : {}),
+      ...(result.enrolledClasses ? { enrolledClasses: result.enrolledClasses } : {}),
     });
   } catch (err) {
     next(err);
@@ -292,11 +308,18 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
       (durationMs || stepDurations) ? { durationMs, stepDurations } : undefined,
     );
 
-    // Only return pass/fail — never expose scores
+    // Only return pass/fail — never expose scores. Exception: DEVICE_CLASS_MISMATCH
+    // surfaces an errorCode + enrolledClasses so the customer's UI can offer
+    // "switch device" or "add this device" flows. Those are binary signals,
+    // not scores — safe to expose.
     res.json({
       success: result.success,
       authenticated: result.authenticated,
-      message: result.authenticated ? 'Authentication successful.' : 'Authentication failed.',
+      message: result.authenticated
+        ? 'Authentication successful.'
+        : result.message || 'Authentication failed.',
+      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(result.enrolledClasses ? { enrolledClasses: result.enrolledClasses } : {}),
     });
   } catch (err) {
     next(err);

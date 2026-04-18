@@ -63,6 +63,9 @@ const externalUserIdField = z.string().min(1).max(255);
 export const TenantEnrollRequestSchema = z.object({
   externalUserId: externalUserIdField,
   signatureData: RawSignatureDataSchema,
+  // Optional opt-out of the add-device recent-verify gate. Setting true
+  // means the customer attests they've authenticated the user by other means.
+  skipRecentVerify: z.boolean().optional(),
 });
 
 export const TenantShapeEnrollRequestSchema = z.object({

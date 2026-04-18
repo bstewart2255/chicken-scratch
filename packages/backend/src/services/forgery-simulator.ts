@@ -6,6 +6,7 @@ import type {
   AllFeatures,
   ShapeSpecificFeatures,
   ShapeScoreBreakdown,
+  DeviceClass,
 } from '@chicken-scratch/shared';
 import type {
   ForgeryLevel,
@@ -276,17 +277,19 @@ const LEVEL_METADATA: Record<ForgeryLevel, { label: string; description: string 
 export async function runForgerySimulation(
   username: string,
   trialsPerLevel: number = 20,
+  deviceClass: DeviceClass = 'mobile',
 ): Promise<ForgerySimulationResult> {
   const user = await userRepo.findByUsername(username);
   if (!user) throw new Error(`User '${username}' not found`);
   if (!user.enrolled) throw new Error(`User '${username}' is not enrolled`);
 
-  // Load enrolled data
-  const sigBaseline = await sigRepo.getBaseline(user.id);
-  if (!sigBaseline) throw new Error('No signature baseline found');
+  // Load enrolled data for the requested class. Defaults to 'mobile' for
+  // back-compat with existing simulations / bookmarked diagnostics URLs.
+  const sigBaseline = await sigRepo.getBaseline(user.id, deviceClass);
+  if (!sigBaseline) throw new Error(`No signature baseline found for ${deviceClass}`);
 
-  const sigSamples = await sigRepo.getSamples(user.id);
-  if (sigSamples.length === 0) throw new Error('No signature samples found');
+  const sigSamples = await sigRepo.getSamples(user.id, deviceClass);
+  if (sigSamples.length === 0) throw new Error(`No signature samples found for ${deviceClass}`);
 
   // Use first signature sample as the source for perturbation
   const sigSampleData = JSON.parse(sigSamples[0].stroke_data) as RawSignatureData;
@@ -296,8 +299,8 @@ export async function runForgerySimulation(
   const shapeData: EnrolledData['shapeData'] = [];
   for (const shapeType of ALL_CHALLENGE_TYPES) {
     const [shapeSample, shapeBaseline] = await Promise.all([
-      shapeRepo.getShapeSample(user.id, shapeType),
-      shapeRepo.getShapeBaseline(user.id, shapeType),
+      shapeRepo.getShapeSample(user.id, shapeType, deviceClass),
+      shapeRepo.getShapeBaseline(user.id, shapeType, deviceClass),
     ]);
     if (!shapeSample || !shapeBaseline) continue;
 

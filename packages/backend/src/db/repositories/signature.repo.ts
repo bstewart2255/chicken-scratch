@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { query } from '../connection.js';
 import { encryptJson, decrypt } from '../../utils/crypto.js';
-import type { AllFeatures, MLFeatureVector, RawSignatureData, DeviceCapabilities } from '@chicken-scratch/shared';
+import type { AllFeatures, MLFeatureVector, RawSignatureData, DeviceCapabilities, DeviceClass } from '@chicken-scratch/shared';
 
 export interface EnrollmentSampleRow {
   id: string;
@@ -11,6 +11,7 @@ export interface EnrollmentSampleRow {
   features: string;
   ml_features: string;
   device_capabilities: string;
+  device_class: DeviceClass;
   created_at: string;
 }
 
@@ -21,6 +22,7 @@ export interface BaselineRow {
   avg_ml_features: string;
   feature_std_devs: string;
   has_pressure_data: boolean;
+  device_class: DeviceClass;
   created_at: string;
   updated_at: string;
 }
@@ -50,11 +52,12 @@ export async function createSample(
   features: AllFeatures,
   mlFeatures: MLFeatureVector,
   deviceCapabilities: DeviceCapabilities,
+  deviceClass: DeviceClass,
 ): Promise<EnrollmentSampleRow> {
   const id = uuid();
   const result = await query<EnrollmentSampleRow>(`
-    INSERT INTO enrollment_samples (id, user_id, sample_number, stroke_data, features, ml_features, device_capabilities)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO enrollment_samples (id, user_id, sample_number, stroke_data, features, ml_features, device_capabilities, device_class)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *
   `, [
     id,
@@ -64,22 +67,23 @@ export async function createSample(
     encryptJson(features),
     encryptJson(mlFeatures),
     JSON.stringify(deviceCapabilities),
+    deviceClass,
   ]);
   return result.rows[0];
 }
 
-export async function getSampleCount(userId: string): Promise<number> {
+export async function getSampleCount(userId: string, deviceClass: DeviceClass): Promise<number> {
   const result = await query<{ count: string }>(
-    'SELECT COUNT(*) as count FROM enrollment_samples WHERE user_id = $1',
-    [userId],
+    'SELECT COUNT(*) as count FROM enrollment_samples WHERE user_id = $1 AND device_class = $2',
+    [userId, deviceClass],
   );
   return parseInt(result.rows[0].count, 10);
 }
 
-export async function getSamples(userId: string): Promise<EnrollmentSampleRow[]> {
+export async function getSamples(userId: string, deviceClass: DeviceClass): Promise<EnrollmentSampleRow[]> {
   const result = await query<EnrollmentSampleRow>(
-    'SELECT * FROM enrollment_samples WHERE user_id = $1 ORDER BY sample_number',
-    [userId],
+    'SELECT * FROM enrollment_samples WHERE user_id = $1 AND device_class = $2 ORDER BY sample_number',
+    [userId, deviceClass],
   );
   return result.rows.map(decryptSampleRow);
 }
@@ -90,12 +94,13 @@ export async function upsertBaseline(
   avgMlFeatures: MLFeatureVector,
   featureStdDevs: Record<string, number>,
   hasPressureData: boolean,
+  deviceClass: DeviceClass,
 ): Promise<BaselineRow> {
   const id = uuid();
   const result = await query<BaselineRow>(`
-    INSERT INTO baselines (id, user_id, avg_features, avg_ml_features, feature_std_devs, has_pressure_data)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT(user_id) DO UPDATE SET
+    INSERT INTO baselines (id, user_id, avg_features, avg_ml_features, feature_std_devs, has_pressure_data, device_class)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    ON CONFLICT(user_id, device_class) DO UPDATE SET
       avg_features = EXCLUDED.avg_features,
       avg_ml_features = EXCLUDED.avg_ml_features,
       feature_std_devs = EXCLUDED.feature_std_devs,
@@ -109,15 +114,25 @@ export async function upsertBaseline(
     encryptJson(avgMlFeatures),
     encryptJson(featureStdDevs),
     hasPressureData,
+    deviceClass,
   ]);
   return result.rows[0];
 }
 
-export async function getBaseline(userId: string): Promise<BaselineRow | undefined> {
+export async function getBaseline(userId: string, deviceClass: DeviceClass): Promise<BaselineRow | undefined> {
   const result = await query<BaselineRow>(
-    'SELECT * FROM baselines WHERE user_id = $1',
-    [userId],
+    'SELECT * FROM baselines WHERE user_id = $1 AND device_class = $2',
+    [userId, deviceClass],
   );
   const row = result.rows[0];
   return row ? decryptBaselineRow(row) : undefined;
+}
+
+/** Returns the distinct set of classes a user already has a signature baseline for. */
+export async function getEnrolledClasses(userId: string): Promise<DeviceClass[]> {
+  const result = await query<{ device_class: DeviceClass }>(
+    'SELECT DISTINCT device_class FROM baselines WHERE user_id = $1',
+    [userId],
+  );
+  return result.rows.map(r => r.device_class);
 }
