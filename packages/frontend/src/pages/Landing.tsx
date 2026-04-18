@@ -56,13 +56,14 @@ function NavBar() {
           color: '#666',
           whiteSpace: 'nowrap',
         }}>
-          Behavioral biometric authentication
+          Biometric account recovery
         </div>
       </div>
       <div style={{ display: 'flex', gap: isMobile ? 14 : 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Try It</a>
         <a href="#how-it-works" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>How It Works</a>
         <a href="#use-cases" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Use Cases</a>
+        <a href="#pricing" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Pricing</a>
         <a href="#get-started" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Pilot</a>
       </div>
     </nav>
@@ -86,7 +87,7 @@ function Hero() {
         marginBottom: isMobile ? 16 : 20,
         letterSpacing: -1,
       }}>
-        Know it&rsquo;s really them &mdash;<br />
+        Your users will forget<br />their passwords.<br />
         <span style={{
           fontFamily: HAND,
           fontWeight: 700,
@@ -97,7 +98,7 @@ function Hero() {
           display: 'inline-block',
           paddingBottom: 6,
         }}>
-          by how they draw.
+          Let them sign instead.
           {/* hand-drawn squiggle underline */}
           <svg
             viewBox="0 0 300 12"
@@ -128,12 +129,13 @@ function Hero() {
         fontSize: isMobile ? 16 : 18,
         color: '#666',
         lineHeight: 1.6,
-        maxWidth: 560,
+        maxWidth: 580,
         margin: isMobile ? '0 auto 28px' : '0 auto 36px',
       }}>
-        Your users sign their name and draw a couple of shapes. chickenScratch verifies
-        them from the unique way they do it &mdash; speed, pressure, timing, stroke order.
-        No passwords to forget. No SMS codes to phish. Just draw.
+        chickenScratch is biometric account recovery as a drop-in SDK. Users enroll
+        their signature at signup. When they forget their password &mdash; or which
+        email they used &mdash; they sign to recover their account. Phishing-proof,
+        AI-resistant, priced by the recovery.
       </p>
       <div style={{
         display: 'flex',
@@ -169,18 +171,18 @@ function HowItWorks() {
   const steps = [
     {
       num: '1',
-      title: 'Embed the SDK',
-      desc: 'Add one script tag to your app. Our widget handles the full enrollment and verification UI.',
+      title: 'Drop in the SDK',
+      desc: 'One script tag in your app. Our widget handles the enrollment and recovery UI — no design work needed on your end.',
     },
     {
       num: '2',
-      title: 'Users enroll',
-      desc: 'Users sign their name and draw shapes 3 times. We build a biometric baseline from their unique drawing style.',
+      title: 'Users enroll at signup',
+      desc: 'Takes about 30 seconds once. The user signs their name and draws two shapes — we build a biometric baseline from how they drew.',
     },
     {
       num: '3',
-      title: 'Verify on return',
-      desc: 'When users come back, they sign again. We compare against their baseline and return pass/fail in under a second.',
+      title: 'Recovery = a signature',
+      desc: 'When a user forgets their password, they sign to prove it\u2019s them. No email reset link. No SMS code. Back in their account in seconds.',
     },
   ];
 
@@ -195,7 +197,7 @@ function HowItWorks() {
         How It Works
       </h2>
       <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
-        Three steps to biometric authentication
+        From signup to password-less recovery in three steps.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 32 }}>
         {steps.map(step => (
@@ -251,23 +253,23 @@ function HowItWorks() {
 function UseCases() {
   const cases = [
     {
-      title: 'Financial Services',
-      desc: 'Add biometric verification to loan signings, account access, and high-value transactions.',
+      title: 'Rarely-used B2B portals',
+      desc: 'Benefits sites, HR tools, tax filing, insurance portals. Your users open them twice a year and forget their password every single time. Cut support tickets in half.',
       color: '#22c55e',
     },
     {
-      title: 'Healthcare',
-      desc: 'Verify patient identity for prescription approvals, telehealth sessions, and record access.',
-      color: '#3b82f6',
-    },
-    {
-      title: 'Legal & Compliance',
-      desc: 'Authenticate signers on contracts, affidavits, and regulatory filings with behavioral proof.',
+      title: 'Password managers',
+      desc: 'Locked out of the tool that was supposed to prevent lockouts. A biometric recovery path is what 1Password, Bitwarden, and self-hosted alternatives all need but none have.',
       color: '#8b5cf6',
     },
     {
-      title: 'Enterprise Access',
-      desc: 'Replace or supplement passwords with biometric drawing for sensitive system access.',
+      title: 'High-value step-up recovery',
+      desc: 'Replace SMS OTP for password resets in financial services, crypto, and healthcare. Defeats SIM-swap and credential-stuffing attacks SMS can\u2019t.',
+      color: '#3b82f6',
+    },
+    {
+      title: 'Consumer accounts with churn risk',
+      desc: 'Loyalty programs, subscription retail, media apps. Users who can\u2019t get back in unsubscribe. Give them a recovery path that doesn\u2019t require finding the signup email.',
       color: '#f59e0b',
     },
   ];
@@ -280,10 +282,10 @@ function UseCases() {
     }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-          Built For
+          Where the Recovery Pain Is Real
         </h2>
         <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
-          Any application where identity matters
+          Any product where "forgot password" is a frequent, expensive flow.
         </p>
 
         <div style={{
@@ -354,10 +356,10 @@ function UseCases() {
           fontSize: 13,
           color: '#666',
         }}>
+          <span>&middot; Phishing-proof</span>
+          <span>&middot; AI-resistant</span>
           <span>&middot; Replay-proof challenges</span>
-          <span>&middot; Sub-second verification</span>
           <span>&middot; BIPA &amp; GDPR-ready</span>
-          <span>&middot; Device fingerprinting</span>
           <span>&middot; Encryption at rest</span>
         </div>
       </div>
@@ -450,7 +452,7 @@ function LiveDemo() {
           Try It Yourself
         </h2>
         <p style={{ color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 24 : 32 }}>
-          Experience enrollment and verification in under 60 seconds.
+          Enroll in 30 seconds, then pretend you forgot your password. Sign to recover.
         </p>
 
         <div style={{
@@ -643,6 +645,159 @@ function LiveDemo() {
   );
 }
 
+function Pricing() {
+  const isMobile = useIsMobile();
+  const rowStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    padding: '10px 0',
+    borderBottom: '1px solid #f0f0f5',
+    fontSize: 14,
+  };
+  const priceStyle = {
+    color: '#1a1a2e',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums' as const,
+  };
+  return (
+    <section id="pricing" style={{
+      padding: isMobile ? '56px 20px' : '80px 40px',
+      maxWidth: 760,
+      margin: '0 auto',
+    }}>
+      <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
+        Simple Pricing
+      </h2>
+      <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
+        First 50 recoveries free. After that, fifty cents each. That&rsquo;s it.
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: isMobile ? 16 : 24,
+      }}>
+        {/* Free tier */}
+        <div style={{
+          padding: 24,
+          border: '1px solid #e5e7eb',
+          borderRadius: 12,
+          background: '#fff',
+        }}>
+          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>
+            Free
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 700, color: '#1a1a2e', lineHeight: 1, marginBottom: 4 }}>
+            $0
+          </div>
+          <div style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
+            for the first 50 recoveries / month
+          </div>
+          <div style={{ fontSize: 13, color: '#666', lineHeight: 1.8 }}>
+            <div>&middot; No credit card required</div>
+            <div>&middot; Full SDK access</div>
+            <div>&middot; Community support</div>
+          </div>
+        </div>
+
+        {/* Pay as you go */}
+        <div style={{
+          padding: 24,
+          border: '2px solid #6366f1',
+          borderRadius: 12,
+          background: '#fff',
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: -10,
+            right: 20,
+            padding: '3px 10px',
+            background: '#6366f1',
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 600,
+            borderRadius: 12,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            Most teams
+          </div>
+          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>
+            Pay as you go
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+            <div style={{ fontSize: 32, fontWeight: 700, color: '#1a1a2e', lineHeight: 1 }}>
+              $0.50
+            </div>
+            <div style={{ fontSize: 14, color: '#999' }}>/ recovery</div>
+          </div>
+          <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+            above the free tier, billed monthly
+          </div>
+          <div style={{ marginTop: 16, marginBottom: 16 }}>
+            <div style={rowStyle}>
+              <span style={{ color: '#666' }}>First 10,000 / month</span>
+              <span style={priceStyle}>$0.50 each</span>
+            </div>
+            <div style={rowStyle}>
+              <span style={{ color: '#666' }}>10,001 &ndash; 100,000</span>
+              <span style={priceStyle}>$0.30 each</span>
+            </div>
+            <div style={{ ...rowStyle, borderBottom: 'none' }}>
+              <span style={{ color: '#666' }}>Above 100,000</span>
+              <span style={priceStyle}>$0.15 each</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: '#666', lineHeight: 1.8 }}>
+            <div>&middot; No monthly minimum</div>
+            <div>&middot; Email support</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 24,
+        padding: 20,
+        border: '1px solid #e5e7eb',
+        borderRadius: 12,
+        background: '#f9fafb',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'start' : 'center',
+        gap: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 4 }}>
+            Enterprise
+          </div>
+          <div style={{ fontSize: 15, color: '#1a1a2e', fontWeight: 500 }}>
+            SLA, DPA, SOC 2 attestation, dedicated support.
+          </div>
+        </div>
+        <a href="#get-started" style={{
+          padding: '10px 24px',
+          fontSize: 14,
+          fontWeight: 600,
+          background: '#1a1a2e',
+          color: '#fff',
+          textDecoration: 'none',
+          borderRadius: 8,
+          whiteSpace: 'nowrap',
+        }}>
+          Get in touch
+        </a>
+      </div>
+
+      <p style={{ textAlign: 'center', color: '#bbb', fontSize: 12, marginTop: 20 }}>
+        You pay for successful recoveries only. Failed attempts and enrolled-device checks are free.
+      </p>
+    </section>
+  );
+}
+
 function SocialProof() {
   const isMobile = useIsMobile();
   return (
@@ -705,8 +860,9 @@ function GetStarted() {
           Start a Pilot
         </h2>
         <p style={{ color: '#666', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
-          We work with a small number of design partners to refine chickenScratch for production use.
-          If your application needs secure, passwordless authentication, let's talk.
+          We&rsquo;re looking for a few design partners to ship biometric account recovery
+          with. If &ldquo;forgot password&rdquo; is one of your top support ticket categories,
+          let&rsquo;s talk.
         </p>
         <div style={{
           padding: 32,
@@ -718,11 +874,11 @@ function GetStarted() {
             What you get:
           </div>
           <div style={{ textAlign: 'left', maxWidth: 400, margin: '0 auto 24px', fontSize: 14, color: '#666', lineHeight: 2 }}>
+            <div>&#10003; Free pilot pricing for the first 6 months</div>
             <div>&#10003; Dedicated tenant with API keys</div>
-            <div>&#10003; Drop-in JavaScript SDK</div>
-            <div>&#10003; Full API access (enrollment, verification, consent)</div>
-            <div>&#10003; Admin dashboard for monitoring</div>
-            <div>&#10003; Direct engineering support</div>
+            <div>&#10003; Drop-in JavaScript SDK + end-to-end docs</div>
+            <div>&#10003; Direct engineering support (you talk to the builder)</div>
+            <div>&#10003; We help you measure support-ticket deflection</div>
           </div>
           <a
             href="mailto:bstew510@gmail.com?subject=chickenScratch%20Pilot%20Interest"
@@ -766,7 +922,7 @@ function Footer() {
       <div style={{ color: '#bbb', fontSize: 13 }}>
         <span style={{ fontFamily: HAND, fontSize: 18, color: '#999' }}>chickenScratch</span>
         <span style={{ margin: '0 8px' }}>&mdash;</span>
-        Behavioral biometric authentication
+        Biometric account recovery
       </div>
     </footer>
   );
@@ -780,6 +936,7 @@ export function Landing() {
       <LiveDemo />
       <HowItWorks />
       <UseCases />
+      <Pricing />
       <SocialProof />
       <GetStarted />
       <Footer />

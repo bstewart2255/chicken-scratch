@@ -1,6 +1,8 @@
 # chickenScratch — Quick Start Guide
 
-Biometric signature authentication for your app. Users sign their name, draw shapes, and chickenScratch verifies their identity based on how they draw — not just what they draw.
+Biometric account recovery for your app. Users enroll their signature once at signup. When they forget their password — or which email they used — they sign to recover their account. No email reset links. No SMS codes. Phishing-proof, AI-resistant, drop-in SDK.
+
+The same primitive also works for step-up auth on sensitive actions (wire transfers, settings changes, etc.). This guide covers recovery as the primary use case.
 
 ## 1. Get Your API Key
 
@@ -83,9 +85,9 @@ const cs = new ChickenScratch({
 
 > **Quick testing:** For development/testing, you can pass your API key (`cs_live_...`) directly instead of an SDK token. Don't do this in production — the key would be visible to anyone viewing your page source.
 
-## 4. Enrollment (First Time)
+## 4. Enrollment (at signup)
 
-Enrollment collects 3 signature samples + 5 shape drawings to build a biometric baseline.
+Enrollment collects 3 signature samples + 5 shape drawings to build a biometric baseline. Run it once, right after the user completes your normal signup.
 
 ```js
 // Run the enrollment flow — renders a multi-step UI in the container
@@ -93,7 +95,7 @@ const result = await cs.enroll('user-123');
 
 if (result.enrolled) {
   // User is now enrolled. Store this fact in your app.
-  console.log('Enrollment complete');
+  console.log('Recovery is now set up for this user');
 }
 ```
 
@@ -104,23 +106,44 @@ The SDK handles:
 - Progress indicator
 - Retry on errors
 
-## 5. Verification (Returning User)
+**Frame it right.** Users see enrollment as "setting up Sign Recovery so you don't get locked out later" — a feature, not a security chore. This drives adoption way higher than "please add this biometric auth step."
 
-Verification captures 1 signature + shapes in a randomized challenge order, then returns pass/fail.
+## 5. Recovery (when the user gets locked out)
+
+Call this from your "forgot password" flow. Captures 1 signature + shapes in a randomized challenge order, then returns pass/fail.
 
 ```js
 const result = await cs.verify('user-123');
 
 if (result.authenticated) {
-  // Grant access
+  // Proven it's really them — log them in, or let them set a new password inline
+} else if (result.errorCode === 'DEVICE_CLASS_MISMATCH') {
+  // User is on a device type they haven't enrolled. Show them which ones
+  // they have:
+  console.log('Enrolled on:', result.enrolledClasses); // e.g. ['mobile']
+  // Prompt them to switch devices, or to add this device via another enrollment.
 } else {
-  // Deny access — user can retry
+  // Signature didn't match the baseline — let them retry, then fall back to
+  // email reset if they can't pass.
 }
 ```
 
-The server never exposes scores or thresholds to the client. You only get `authenticated: true/false`.
+The server never exposes scores or thresholds to the client — you only get `authenticated: true/false` plus optional error codes. Same primitive works for step-up auth on sensitive actions.
 
-## 6. Check Enrollment Status
+## 6. Adding another device (optional)
+
+Signatures drawn with a finger on a phone produce a different biometric signal than with a mouse on a laptop. chickenScratch supports per-class baselines (`mobile` and `desktop`) — a user can enroll both and recover from either.
+
+To add a new device class for a user who's already enrolled on one:
+1. User signs in on their existing device and successfully verifies (e.g. via a regular recovery flow, or a login-time biometric check).
+2. Within 10 minutes, they call `cs.enroll('user-123')` on the new device class.
+3. Baseline for the new class is created. They can now recover from either device.
+
+The 10-minute recent-verify requirement is what makes "add a device" safe — an attacker with a stolen SDK token can't add their own device without first biometrically verifying as the user.
+
+If your app already authenticates the user via other means (password + MFA), you can bypass the gate by passing `skipRecentVerify: true` on the enrollment call from your backend. You then take responsibility for that authentication step.
+
+## 7. Check Enrollment Status
 
 ```js
 const enrolled = await cs.isEnrolled('user-123');

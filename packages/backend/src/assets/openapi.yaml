@@ -1,42 +1,75 @@
 openapi: 3.1.0
 info:
-  title: chickenScratch API
+  title: chickenScratch API — Biometric Account Recovery
   version: 1.0.0
   description: |
-    chickenScratch provides handwriting-based biometric authentication via a
-    JavaScript SDK or REST API. Businesses (Customers) embed the SDK or call
-    the API directly; their end users enroll and verify their identity by
-    drawing their signature and a set of standard shapes on a touch/stylus
-    device.
+    chickenScratch is a drop-in biometric account recovery service. When your
+    users forget their password — or which email they used to sign up — they
+    sign their name to prove it's really them, instead of going through an
+    email reset link or SMS OTP. Integrate via the JavaScript SDK or the REST
+    API below.
+
+    The same enrollment/verify primitives also support step-up auth for
+    sensitive actions (wire approvals, settings changes, high-value transfers).
+    Recovery is the primary use case we're building for; everything below
+    applies to both.
 
     ## Authentication
 
-    All `/api/v1/*` endpoints require a tenant API key in the `X-API-Key`
-    header. Keys are issued by the chickenScratch admin and are only shown
-    once at creation — store them securely.
+    All `/api/v1/*` endpoints accept either a tenant API key (server-to-server)
+    or a short-lived SDK token (browser use).
 
-    ```
-    X-API-Key: cs_xxxxxxxxxxxxxxxxxxxxxxxx
-    ```
+    - API key: `X-API-Key: cs_live_xxxxxxxxxxxxxxxxxxxxxxxx`
+    - SDK token: `Authorization: Bearer cs_sdk_xxxxxxxxxxxxxxxxxxxx`
+
+    API keys are issued once at tenant creation. SDK tokens are minted by your
+    backend via `POST /api/v1/sdk-token` and expire in 15 minutes — use them
+    to keep your API key off the browser.
 
     ## Consent requirement
 
     chickenScratch collects biometric identifiers. Before any enrollment data
-    is accepted, the end user must give **explicit written consent** via
+    is accepted, the end user must give **explicit consent** via
     `POST /api/v1/consent`. Enrollment calls return `403 Forbidden` until
     consent is recorded. This is required for BIPA (Illinois), Texas CUBI,
     and GDPR compliance.
 
-    ## Integration flow
+    ## Integration flow — recovery (primary use case)
 
     ```
-    1. POST /api/v1/consent        — record user consent
-    2. POST /api/v1/enroll (×3)    — collect 3 signature samples
-    3. POST /api/v1/enroll/shape   — collect each of 5 shapes (once each)
-    4. GET  /api/v1/enroll/:id/status — confirm enrolled: true
-    5. POST /api/v1/challenge       — get randomised shape order + challengeId
-    6. POST /api/v1/verify          — submit signature + shapes → pass/fail
+    Signup (one-time):
+    1. POST /api/v1/consent              — record user consent
+    2. POST /api/v1/enroll (×3)          — collect 3 signature samples
+    3. POST /api/v1/enroll/shape (×5)    — collect each of 5 shapes
+       → Baseline is built. User is enrolled.
+
+    Recovery (every time they forget their password):
+    4. POST /api/v1/challenge            — get randomised shape order + challengeId
+    5. POST /api/v1/verify               — submit signature + shapes → pass/fail
+       → On pass, your backend logs them in or lets them set a new password.
     ```
+
+    ## Multi-device enrollment
+
+    Signatures drawn on different device types produce different biometric
+    signals — a finger on a phone and a mouse on a laptop look nothing alike
+    in behavioral features. chickenScratch supports per-device-class baselines:
+    users enroll on each device class they want to recover from (currently
+    `mobile` and `desktop`).
+
+    When a user tries to verify on a class they haven't enrolled,
+    `POST /api/v1/verify` returns `errorCode: DEVICE_CLASS_MISMATCH` along
+    with the list of enrolled classes. Your client can then prompt the user
+    to switch devices, or to add the current device via another enrollment
+    flow.
+
+    Adding a new device class to an already-enrolled user requires the user
+    to have passed a biometric verify on an existing class within the last
+    10 minutes. This prevents an attacker with a stolen SDK token from
+    silently adding their own device. If you've authenticated the user via
+    other means (e.g. password + MFA), pass `skipRecentVerify: true` in the
+    enrollment request body to bypass the gate — you take responsibility
+    for that authentication step.
 
   contact:
     email: privacy@chickenscratch.io
@@ -57,7 +90,10 @@ tags:
   - name: Enrollment
     description: Collect signature samples and shape drawings to build a user baseline.
   - name: Verification
-    description: Challenge-response authentication using the enrolled baseline.
+    description: |
+      Challenge-response verification using the enrolled baseline. Primary use
+      case is account recovery — proving it's the user when they can't log in
+      the usual way — but also works for step-up auth on sensitive actions.
   - name: User Management
     description: Delete users and their biometric data (right to erasure).
   - name: Admin
@@ -416,6 +452,14 @@ paths:
                   example: user_abc123
                 signatureData:
                   $ref: '#/components/schemas/RawSignatureData'
+                skipRecentVerify:
+                  type: boolean
+                  default: false
+                  description: |
+                    Opt out of the add-device recent-verify gate. Only pass
+                    `true` if you have authenticated the user through other
+                    means (password + MFA, etc.). Ignored for users with no
+                    existing baselines (initial enrollment).
       responses:
         '200':
           description: Sample recorded
@@ -439,6 +483,16 @@ paths:
                     description: True only after all signatures AND shapes are enrolled
                   message:
                     type: string
+                  deviceClass:
+                    type: string
+                    enum: [mobile, desktop]
+                    description: The device class detected from this sample.
+                  enrolledClasses:
+                    type: array
+                    items:
+                      type: string
+                      enum: [mobile, desktop]
+                    description: All classes this user has baselines for.
               example:
                 success: true
                 externalUserId: user_abc123
@@ -446,21 +500,49 @@ paths:
                 samplesRemaining: 2
                 enrolled: false
                 message: Sample 1 of 3 recorded.
+                deviceClass: mobile
         '400':
-          description: Sample rejected (quality gate failed or validation error)
+          description: Sample rejected (quality gate failed, validation error, or already enrolled on this device class)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Consent required
+          description: |
+            Two distinct cases:
+            1. `errorCode: RECENT_VERIFY_REQUIRED` — user has existing baselines on other classes, needs to verify first before adding this class. Their last successful verify is older than the 10-minute window. Bypass with `skipRecentVerify: true` if you've authenticated them another way.
+            2. No errorCode — user has not recorded consent via `POST /api/v1/consent`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                success: false
-                error: Explicit consent required before biometric enrollment. Call POST /api/v1/consent first.
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                  errorCode:
+                    type: string
+                    enum: [RECENT_VERIFY_REQUIRED]
+                  enrolledClasses:
+                    type: array
+                    items:
+                      type: string
+                      enum: [mobile, desktop]
+              examples:
+                recentVerify:
+                  summary: Add-device gate
+                  value:
+                    success: false
+                    message: Adding a new device class requires a recent successful verification on an already-enrolled device.
+                    errorCode: RECENT_VERIFY_REQUIRED
+                    enrolledClasses: [mobile]
+                consent:
+                  summary: Consent missing
+                  value:
+                    success: false
+                    error: Explicit consent required before biometric enrollment. Call POST /api/v1/consent first.
 
   /api/v1/enroll/shape:
     post:
@@ -642,22 +724,31 @@ paths:
 
   /api/v1/verify:
     post:
-      summary: Verify identity
+      summary: Verify identity (account recovery or step-up auth)
       operationId: verify
       tags: [Verification]
       security:
         - ApiKeyAuth: []
       description: |
-        Submit the user's signature and all 5 shapes for biometric
-        verification. Shapes must be submitted in the exact order returned
-        by `POST /api/v1/challenge`.
+        Submit the user's signature and all 5 shapes to verify it's really
+        them. Call this from your "forgot password" flow (recovery) or
+        before a sensitive action (step-up auth). Shapes must be submitted
+        in the exact order returned by `POST /api/v1/challenge`.
 
         Returns only `authenticated: true/false` — no scores or feature
-        data are exposed to prevent calibration attacks.
+        data are exposed to prevent calibration attacks. The exception is
+        `DEVICE_CLASS_MISMATCH`, which tells the client the user needs to
+        verify from a different device type or add this one to their account.
 
         **Combined scoring**: `finalScore = signature × 0.7 + mean(shapes) × 0.3`.
         Both the signature and each shape must also clear a per-modality
         minimum threshold (signature ≥ 75, shapes ≥ 40).
+
+        **Device class is detected automatically** from the submitted stroke
+        data. The user's baseline for that class is loaded. If the user has
+        never enrolled on this class, the response is `errorCode:
+        DEVICE_CLASS_MISMATCH` with `enrolledClasses` listing what they do
+        have — render a "switch device" or "add this device" prompt.
 
         **Lockout**: 5 failed attempts within 15 minutes triggers a 30-minute
         lockout. The response includes `lockedUntil` and `retryAfterSeconds`.
@@ -713,6 +804,21 @@ paths:
                     description: True if identity verified, false if rejected
                   message:
                     type: string
+                  errorCode:
+                    type: string
+                    enum: [DEVICE_CLASS_MISMATCH]
+                    description: |
+                      Present when the user is on a device class they haven't
+                      enrolled. Not present for normal pass/fail results.
+                  enrolledClasses:
+                    type: array
+                    items:
+                      type: string
+                      enum: [mobile, desktop]
+                    description: |
+                      Classes the user has baselines for. Present alongside
+                      `DEVICE_CLASS_MISMATCH` so the client can render
+                      "switch device" UI.
               examples:
                 passed:
                   summary: Identity verified
@@ -726,6 +832,14 @@ paths:
                     success: true
                     authenticated: false
                     message: Authentication failed.
+                deviceMismatch:
+                  summary: Wrong device type — enrolled on mobile, verifying on desktop
+                  value:
+                    success: false
+                    authenticated: false
+                    message: You enrolled on mobile. Switch to one of those devices to verify, or add this device to your account.
+                    errorCode: DEVICE_CLASS_MISMATCH
+                    enrolledClasses: [mobile]
         '404':
           description: User not found
           content:
