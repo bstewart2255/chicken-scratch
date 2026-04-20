@@ -6,7 +6,8 @@
     "packages/shared",
     "packages/backend",
     "packages/frontend",
-    "packages/sdk"
+    "packages/sdk",
+    "packages/demo-app"
   ],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w packages/backend\" \"npm run dev -w packages/frontend\"",
