@@ -101,6 +101,13 @@ tags:
       that token at /api/v1/attestation/verify for a trusted claim of who
       was verified. This is the check that makes recovery flows safe from
       a client that lies about having passed.
+  - name: Events
+    description: |
+      Append-only audit log of security-relevant actions — enrollment,
+      verification pass/fail, device mismatch, consent grants/withdrawals,
+      user deletions, lockouts. Use for your own compliance review
+      (BIPA/GDPR record-keeping) or to surface user-visible activity in
+      your product ("here's when someone signed into your account").
   - name: User Management
     description: Delete users and their biometric data (right to erasure).
   - name: Admin
@@ -981,6 +988,137 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # ── Events / audit log ─────────────────────────────────────────────────────
+
+  /api/v1/events:
+    get:
+      summary: List events (tenant-wide audit log)
+      operationId: listTenantEvents
+      tags: [Events]
+      security:
+        - ApiKeyAuth: []
+      description: |
+        Returns recent events across the entire tenant, newest first. Cursor-
+        paginated by `created_at` — pass the response's `nextBefore` value as
+        the `before` query param to fetch the next page. `eventType` filter
+        restricts to one kind of event.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: before
+          in: query
+          description: ISO 8601 timestamp; only events with `created_at < before` are returned.
+          schema:
+            type: string
+            format: date-time
+        - name: eventType
+          in: query
+          schema:
+            type: string
+            enum:
+              - enrollment_completed
+              - verification_passed
+              - verification_failed
+              - device_class_mismatch
+              - recovery_gate_blocked
+              - lockout_triggered
+              - consent_granted
+              - consent_withdrawn
+              - user_deleted
+      responses:
+        '200':
+          description: Event page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        externalUserId: { type: string, nullable: true }
+                        eventType: { type: string }
+                        deviceClass: { type: string, enum: [mobile, desktop], nullable: true }
+                        metadata:
+                          type: object
+                          nullable: true
+                          description: Event-specific payload. Shape depends on eventType.
+                        createdAt:
+                          type: string
+                          format: date-time
+                  nextBefore:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: Cursor for the next page, or null if this was the last page.
+              example:
+                events:
+                  - id: 4b1c2f...
+                    externalUserId: user_abc123
+                    eventType: verification_passed
+                    deviceClass: mobile
+                    metadata: null
+                    createdAt: '2026-04-20T15:30:00.000Z'
+                  - id: 9a0d...
+                    externalUserId: user_abc123
+                    eventType: enrollment_completed
+                    deviceClass: mobile
+                    metadata: null
+                    createdAt: '2026-04-20T15:20:00.000Z'
+                nextBefore: '2026-04-20T15:20:00.000Z'
+        '400':
+          description: Unknown eventType filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/events/{externalUserId}:
+    get:
+      summary: List events for one user
+      operationId: listUserEvents
+      tags: [Events]
+      security:
+        - ApiKeyAuth: []
+      description: |
+        Same shape as `/api/v1/events` but scoped to a single user. Useful
+        for building per-user activity views in your own admin or for
+        fulfilling "what do you know about me" data-access requests under
+        GDPR/BIPA.
+      parameters:
+        - name: externalUserId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: before
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: eventType
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event page (same shape as /api/v1/events)
 
   # ── User management ────────────────────────────────────────────────────────
 

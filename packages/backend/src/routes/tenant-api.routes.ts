@@ -11,6 +11,7 @@ import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, del
 import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
 import { createSdkToken } from '../services/sdk-token.service.js';
 import { createAttestationToken, verifyAttestationToken } from '../services/attestation.service.js';
+import * as eventRepo from '../db/repositories/event.repo.js';
 import type { DeviceClass, TenantApiErrorCode } from '@chicken-scratch/shared';
 
 /**
@@ -110,6 +111,12 @@ router.post('/api/v1/consent', async (req, res, next) => {
     const userAgent = req.headers['user-agent'] ?? null;
 
     const result = await recordConsent(tenant.id, externalUserId, version, ip, userAgent);
+    eventRepo.recordEvent({
+      tenantId: tenant.id,
+      externalUserId,
+      eventType: 'consent_granted',
+      metadata: { policyVersion: version },
+    });
     res.json({
       success: true,
       externalUserId,
@@ -159,6 +166,19 @@ router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
       res.status(404).json(errorBody('USER_NOT_FOUND', result.message, { externalUserId }));
       return;
     }
+    // Consent withdrawal triggers immediate data deletion. Log both as
+    // discrete events so the audit trail shows the full compliance response.
+    eventRepo.recordEvent({
+      tenantId: tenant.id,
+      externalUserId,
+      eventType: 'consent_withdrawn',
+    });
+    eventRepo.recordEvent({
+      tenantId: tenant.id,
+      externalUserId,
+      eventType: 'user_deleted',
+      metadata: { deletionSummary: result.deletionSummary, reason: 'consent_withdrawn' },
+    });
     res.status(200).json({
       success: true,
       externalUserId,
@@ -206,6 +226,29 @@ router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchem
       ? undefined
       : (result.errorCode as TenantApiErrorCode | undefined)
         ?? (result.message.toLowerCase().includes('sample') ? 'QUALITY_GATE_FAILED' : 'INVALID_REQUEST');
+
+    // Audit:
+    //  - a fresh baseline just crossed the finish line (samplesRemaining === 0
+    //    && enrolled is true for this class)
+    //  - the recent-verify gate blocked the enrollment
+    if (result.success && result.samplesRemaining === 0 && result.deviceClass) {
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId: result.userId,
+        externalUserId,
+        eventType: 'enrollment_completed',
+        deviceClass: result.deviceClass,
+      });
+    } else if (result.errorCode === 'RECENT_VERIFY_REQUIRED') {
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId: result.userId,
+        externalUserId,
+        eventType: 'recovery_gate_blocked',
+        deviceClass: result.deviceClass,
+        metadata: { enrolledClasses: result.enrolledClasses },
+      });
+    }
 
     res.status(status).json({
       success: result.success,
@@ -321,6 +364,13 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
     // Lockout check — must happen before running verification
     const lockout = await checkLockout(userId);
     if (lockout.locked) {
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId,
+        externalUserId,
+        eventType: 'lockout_triggered',
+        metadata: { lockedUntil: lockout.lockedUntil, retryAfterSeconds: lockout.retryAfterSeconds },
+      });
       res.status(423).json(errorBody('LOCKED_OUT', lockoutMessage(lockout), {
         lockedUntil: lockout.lockedUntil,
         retryAfterSeconds: lockout.retryAfterSeconds,
@@ -349,6 +399,35 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
         result.deviceClass as DeviceClass,
       );
       attestationToken = token.token;
+    }
+
+    // Audit: pass/fail/mismatch. Fire-and-forget.
+    if (result.errorCode === 'DEVICE_CLASS_MISMATCH') {
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId,
+        externalUserId,
+        eventType: 'device_class_mismatch',
+        deviceClass: (result.deviceClass as DeviceClass | undefined) ?? null,
+        metadata: { enrolledClasses: result.enrolledClasses },
+      });
+    } else if (result.authenticated) {
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId,
+        externalUserId,
+        eventType: 'verification_passed',
+        deviceClass: (result.deviceClass as DeviceClass | undefined) ?? null,
+      });
+    } else if (result.success) {
+      // Pipeline ran but scoring rejected — real failure, not a user-not-found
+      eventRepo.recordEvent({
+        tenantId: tenant.id,
+        userId,
+        externalUserId,
+        eventType: 'verification_failed',
+        deviceClass: (result.deviceClass as DeviceClass | undefined) ?? null,
+      });
     }
 
     // Only return pass/fail — never expose scores. Exceptions intentionally
@@ -446,6 +525,86 @@ router.post('/api/v1/attestation/verify', async (req, res, next) => {
   }
 });
 
+// ─── Events / audit log ───────────────────────────────────────────────────────
+
+/**
+ * Shared event-listing logic used by both the tenant-wide and per-user
+ * endpoints. Paginates by created_at descending via a `before` cursor.
+ */
+async function handleEventList(
+  tenantId: string,
+  externalUserId: string | null,
+  req: Request,
+  res: import('express').Response,
+) {
+  const limitRaw = Number(req.query.limit ?? 50);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
+  const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+  const rawType = typeof req.query.eventType === 'string' ? req.query.eventType : undefined;
+
+  const allowedTypes = new Set([
+    'enrollment_completed',
+    'verification_passed',
+    'verification_failed',
+    'device_class_mismatch',
+    'recovery_gate_blocked',
+    'lockout_triggered',
+    'consent_granted',
+    'consent_withdrawn',
+    'user_deleted',
+  ]);
+  if (rawType && !allowedTypes.has(rawType)) {
+    res.status(400).json(errorBody('INVALID_REQUEST', `Unknown eventType: ${rawType}`));
+    return;
+  }
+
+  const page = await eventRepo.listEvents(tenantId, externalUserId, {
+    limit,
+    before,
+    eventType: rawType as eventRepo.EventType | undefined,
+  });
+
+  res.json({
+    events: page.events.map(e => ({
+      id: e.id,
+      externalUserId: e.external_user_id,
+      eventType: e.event_type,
+      deviceClass: e.device_class,
+      metadata: e.metadata ? JSON.parse(e.metadata) : null,
+      createdAt: e.created_at,
+    })),
+    nextBefore: page.nextBefore,
+  });
+}
+
+/**
+ * GET /api/v1/events
+ * List recent events across the entire tenant. Supports ?limit (1–200,
+ * default 50), ?before (cursor — ISO timestamp), and ?eventType filter.
+ */
+router.get('/api/v1/events', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    await handleEventList(tenant.id, null, req, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/events/:externalUserId
+ * Same shape, scoped to one user. Useful for "show me this user's
+ * full history" in a customer's own admin UI or compliance review.
+ */
+router.get('/api/v1/events/:externalUserId', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    await handleEventList(tenant.id, req.params.externalUserId, req, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── User management ──────────────────────────────────────────────────────────
 
 router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
@@ -459,6 +618,13 @@ router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
       res.status(404).json(errorBody('USER_NOT_FOUND', result.message));
       return;
     }
+
+    eventRepo.recordEvent({
+      tenantId: tenant.id,
+      externalUserId,
+      eventType: 'user_deleted',
+      metadata: { deletionSummary: result.deletionSummary, reason: 'explicit_delete_request' },
+    });
 
     res.json({
       success: true,
