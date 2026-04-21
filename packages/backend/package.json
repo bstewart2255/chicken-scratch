@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@chicken-scratch/shared": "*",
+    "@sentry/node": "^10.49.0",
     "@types/pg": "^8.20.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",

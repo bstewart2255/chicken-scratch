@@ -1,3 +1,7 @@
+// instrument MUST be the first import — it initializes Sentry + OpenTelemetry
+// instrumentation, which needs to hook into module loading before any other
+// code runs. Side-effect import intentionally.
+import './instrument.js';
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { runMigrations } from './db/migrate.js';

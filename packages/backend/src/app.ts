@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import fs from 'fs';
+import * as Sentry from '@sentry/node';
 import healthRoutes from './routes/health.routes.js';
 import enrollmentRoutes from './routes/enrollment.routes.js';
 import authRoutes from './routes/auth.routes.js';
@@ -155,6 +156,11 @@ export function createApp() {
       res.sendFile(path.join(frontendDist, 'index.html'));
     });
   }
+
+  // Sentry error handler — captures thrown errors on their way out of route
+  // handlers, BEFORE our generic errorHandler translates them to 500s. No-op
+  // when SENTRY_DSN is unset.
+  Sentry.setupExpressErrorHandler(app);
 
   app.use(errorHandler);
 
