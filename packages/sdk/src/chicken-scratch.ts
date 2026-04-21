@@ -184,12 +184,20 @@ export class ChickenScratch {
         stepDurations,
       });
 
+      const apiResponse = response as typeof response & {
+        attestationToken?: string;
+        errorCode?: string;
+        enrolledClasses?: string[];
+      };
       const result: AuthResult = {
         success: response.success,
         authenticated: response.authenticated,
         message: response.authenticated
           ? 'Identity verified successfully.'
           : 'Verification failed. Please try again.',
+        ...(apiResponse.attestationToken ? { attestationToken: apiResponse.attestationToken } : {}),
+        ...(apiResponse.errorCode ? { errorCode: apiResponse.errorCode } : {}),
+        ...(apiResponse.enrolledClasses ? { enrolledClasses: apiResponse.enrolledClasses } : {}),
       };
 
       ui.showResult(response.authenticated, result.message);

@@ -242,6 +242,7 @@ export async function verifyFull(
     threshold,
     signatureScore: Math.round(signatureScore * 100) / 100,
     shapeScores,
+    deviceClass,
     message: authenticated
       ? `Authentication successful (score: ${finalScore}).`
       : `Authentication failed (score: ${finalScore}, threshold: ${threshold}).`,

@@ -16,6 +16,7 @@ export function Forgot() {
   const [fragment, setFragment] = useState('');
   const [matches, setMatches] = useState<LookupMatch[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [attestationToken, setAttestationToken] = useState('');
   const [enrolledClasses, setEnrolledClasses] = useState<string[]>([]);
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
@@ -51,21 +52,19 @@ export function Forgot() {
         baseUrl: CHICKEN_SCRATCH_BASE_URL,
         container: widgetRef.current,
         onComplete: (result) => {
-          if (result.authenticated) {
-            // Successful biometric recovery — move to set-password step
+          if (result.authenticated && result.attestationToken) {
+            // Successful biometric recovery. Stash the attestation token so
+            // the demo-app backend can validate it server-to-server before
+            // letting us change the password / establish a session.
+            setAttestationToken(result.attestationToken);
             setPhase('set-password');
+          } else if (result.errorCode === 'DEVICE_CLASS_MISMATCH') {
+            setError(result.message);
+            setEnrolledClasses(result.enrolledClasses ?? []);
+            setPhase('wrong-device');
           } else {
-            // Scoring failed. Inspect the message for DEVICE_CLASS_MISMATCH
-            // cues and branch accordingly. (The SDK's AuthResult doesn't
-            // currently expose errorCode directly, so we sniff the message —
-            // a follow-up to the SDK should surface errorCode cleanly.)
-            if (/device|enrolled on/i.test(result.message)) {
-              setError(result.message);
-              setPhase('wrong-device');
-            } else {
-              setError(result.message || 'Signature didn\u2019t match.');
-              setPhase('failed');
-            }
+            setError(result.message || 'Signature didn\u2019t match.');
+            setPhase('failed');
           }
         },
         onError: (err) => {
@@ -83,7 +82,11 @@ export function Forgot() {
 
   const completeRecovery = async () => {
     try {
-      const session = await recoveryComplete(selectedUserId, newPassword || undefined);
+      const session = await recoveryComplete(
+        selectedUserId,
+        attestationToken,
+        newPassword || undefined,
+      );
       saveSession(session);
       navigate('/dashboard');
     } catch (err) {

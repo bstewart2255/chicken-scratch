@@ -95,4 +95,7 @@ export interface FullVerifyResponse {
   // Classes the user already has baselines for. Present with DEVICE_CLASS_MISMATCH
   // so clients can tell the user which device(s) they can verify on.
   enrolledClasses?: string[];
+  // The device class detected from the submitted strokes. Useful context even
+  // when verification passes.
+  deviceClass?: string;
 }

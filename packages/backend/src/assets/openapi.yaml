@@ -94,6 +94,13 @@ tags:
       Challenge-response verification using the enrolled baseline. Primary use
       case is account recovery — proving it's the user when they can't log in
       the usual way — but also works for step-up auth on sensitive actions.
+  - name: Attestation
+    description: |
+      Server-to-server validation of a successful verify. When /api/v1/verify
+      passes, it returns a short-lived signed token; your backend exchanges
+      that token at /api/v1/attestation/verify for a trusted claim of who
+      was verified. This is the check that makes recovery flows safe from
+      a client that lies about having passed.
   - name: User Management
     description: Delete users and their biometric data (right to erasure).
   - name: Admin
@@ -804,6 +811,15 @@ paths:
                     description: True if identity verified, false if rejected
                   message:
                     type: string
+                  attestationToken:
+                    type: string
+                    description: |
+                      Short-lived signed JWT (5 min TTL) present only when
+                      `authenticated: true`. Pass this to your backend so it
+                      can validate server-to-server via
+                      `POST /api/v1/attestation/verify`. Never trust
+                      `authenticated: true` alone — the browser could lie,
+                      but it cannot forge this token.
                   errorCode:
                     type: string
                     enum: [DEVICE_CLASS_MISMATCH]
@@ -865,6 +881,102 @@ paths:
                     type: integer
         '429':
           description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Attestation ────────────────────────────────────────────────────────────
+
+  /api/v1/attestation/verify:
+    post:
+      summary: Validate an attestation token
+      operationId: verifyAttestation
+      tags: [Attestation]
+      security:
+        - ApiKeyAuth: []
+      description: |
+        Call this from your backend to validate a token you received from the
+        browser SDK's `AuthResult.attestationToken`. Returns `valid: true`
+        plus the attested claims if the token is authentic, unexpired, and
+        bound to your tenant.
+
+        **This endpoint is API-key-only** — SDK tokens are rejected with
+        `403`. Attestation is a server-to-server check; the browser cannot
+        validate its own attestation.
+
+        **When to call:** every time you would otherwise gate a privileged
+        action on a successful recovery (password reset, login, high-value
+        transaction). Don't trust `authenticated: true` from /api/v1/verify
+        alone — the browser can lie; the attestation cannot be forged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The attestationToken from the SDK's AuthResult.
+            example:
+              token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      responses:
+        '200':
+          description: Attestation is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  externalUserId:
+                    type: string
+                    description: The user the attestation was minted for.
+                  deviceClass:
+                    type: string
+                    enum: [mobile, desktop]
+                  verifiedAt:
+                    type: string
+                    format: date-time
+                    description: When the original verify happened.
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: When this attestation becomes invalid.
+              example:
+                valid: true
+                externalUserId: user_abc123
+                deviceClass: mobile
+                verifiedAt: '2026-04-20T15:30:00.000Z'
+                expiresAt: '2026-04-20T15:35:00.000Z'
+        '400':
+          description: Missing token in request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token invalid, expired, or tampered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+        '403':
+          description: |
+            Two cases:
+            1. Token belongs to a different tenant.
+            2. Caller authenticated with an SDK token instead of an API key
+               (this endpoint requires server-side authentication).
           content:
             application/json:
               schema:

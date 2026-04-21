@@ -51,6 +51,27 @@ export interface AuthResult {
   authenticated?: boolean;
   enrolled?: boolean;
   message: string;
+  /**
+   * Short-lived signed token returned by the chickenScratch backend on
+   * successful verification. Pass this to your own backend so it can
+   * validate the attestation server-to-server via
+   * POST /api/v1/attestation/verify. Don't trust `authenticated: true`
+   * alone — the browser could lie; the attestation is what your
+   * backend should gate privileged actions on.
+   */
+  attestationToken?: string;
+  /**
+   * Machine-readable error code when success=false. E.g.
+   * `DEVICE_CLASS_MISMATCH` — the user is trying to verify on a device
+   * class they haven't enrolled. Present alongside `enrolledClasses`.
+   */
+  errorCode?: string;
+  /**
+   * Classes the user already has baselines for (mobile / desktop).
+   * Present with DEVICE_CLASS_MISMATCH so you can render "switch device"
+   * or "add this device" UI.
+   */
+  enrolledClasses?: string[];
 }
 
 export interface StrokePoint {

@@ -54,8 +54,16 @@ export function recoveryLookup(fragment: string): Promise<{ matches: LookupMatch
   return post<{ matches: LookupMatch[] }>('/demo-api/recovery/lookup', { fragment });
 }
 
-export function recoveryComplete(userId: string, newPassword?: string): Promise<Session> {
-  return post<Session>('/demo-api/recovery/complete', { userId, newPassword });
+export function recoveryComplete(
+  userId: string,
+  attestationToken: string,
+  newPassword?: string,
+): Promise<Session> {
+  return post<Session>('/demo-api/recovery/complete', {
+    userId,
+    attestationToken,
+    newPassword,
+  });
 }
 
 export interface SdkTokenResponse {

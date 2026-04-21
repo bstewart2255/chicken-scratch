@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { requireApiKey } from '../middleware/api-key-auth.js';
 import { sdkTokenAuth } from '../middleware/sdk-token-auth.js';
 import { validate } from '../middleware/validate.js';
@@ -10,6 +10,8 @@ import { createChallenge } from '../services/session.service.js';
 import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, deleteUser } from '../services/consent.service.js';
 import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
 import { createSdkToken } from '../services/sdk-token.service.js';
+import { createAttestationToken, verifyAttestationToken } from '../services/attestation.service.js';
+import type { DeviceClass } from '@chicken-scratch/shared';
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
@@ -308,18 +310,108 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
       (durationMs || stepDurations) ? { durationMs, stepDurations } : undefined,
     );
 
-    // Only return pass/fail — never expose scores. Exception: DEVICE_CLASS_MISMATCH
-    // surfaces an errorCode + enrolledClasses so the customer's UI can offer
-    // "switch device" or "add this device" flows. Those are binary signals,
-    // not scores — safe to expose.
+    // On successful verify, mint an attestation token the customer's backend
+    // can validate server-to-server via POST /api/v1/attestation/verify.
+    // Without this, the customer's backend has no way to prove the browser
+    // really passed verify (vs. a malicious client lying). Short-lived
+    // (5 min) and tenant-scoped so it can't be reused across tenants.
+    let attestationToken: string | undefined;
+    if (result.authenticated && result.deviceClass) {
+      const token = createAttestationToken(
+        tenant.id,
+        externalUserId,
+        result.deviceClass as DeviceClass,
+      );
+      attestationToken = token.token;
+    }
+
+    // Only return pass/fail — never expose scores. Exceptions intentionally
+    // exposed: errorCode + enrolledClasses (so clients can render "switch
+    // device" UI) and attestationToken (for the customer's backend to
+    // validate server-to-server).
     res.json({
       success: result.success,
       authenticated: result.authenticated,
       message: result.authenticated
         ? 'Authentication successful.'
         : result.message || 'Authentication failed.',
+      ...(attestationToken ? { attestationToken } : {}),
       ...(result.errorCode ? { errorCode: result.errorCode } : {}),
       ...(result.enrolledClasses ? { enrolledClasses: result.enrolledClasses } : {}),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Attestation ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/attestation/verify
+ *
+ * Validate an attestation token returned by /api/v1/verify. Called by the
+ * customer's backend as the last step of a recovery (or step-up) flow, before
+ * any privileged action is taken: the customer hands the token they received
+ * from the browser, chickenScratch validates it, and returns the claims.
+ *
+ * This is the server-to-server check that makes the recovery flow trustworthy:
+ * without it, the customer's backend has no way to distinguish "the browser
+ * really passed verify" from "the browser is lying." With it, the customer
+ * sees a signed, tenant-bound, unexpired attestation that explicitly names
+ * the user who was verified.
+ *
+ * Requires API-key auth (intentionally NOT callable from SDK tokens — an SDK
+ * token is browser-side, and we don't want browser code validating its own
+ * attestations).
+ */
+router.post('/api/v1/attestation/verify', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+
+    // SDK-token auth is not sufficient here. This endpoint is for the
+    // customer's backend, not the browser. If the caller came in via an SDK
+    // token (short-lived, browser-scoped), reject.
+    // sdkTokenAuth middleware stashes sdkExternalUserId on the request when
+    // authentication came from an SDK token; if absent, it was API-key auth.
+    if ((req as Request & { sdkExternalUserId?: string }).sdkExternalUserId !== undefined) {
+      res.status(403).json({
+        success: false,
+        error: 'Attestation verification requires an API key, not an SDK token. Call this from your backend.',
+      });
+      return;
+    }
+
+    const { token } = req.body ?? {};
+    if (!token || typeof token !== 'string') {
+      res.status(400).json({ success: false, error: 'token is required.' });
+      return;
+    }
+
+    const attestation = verifyAttestationToken(token);
+    if (!attestation) {
+      res.status(401).json({
+        valid: false,
+        error: 'Attestation token is invalid or expired.',
+      });
+      return;
+    }
+
+    // Tenant binding: an attestation minted for tenant A cannot be used to
+    // claim a verification in tenant B's context. Reject with 403.
+    if (attestation.tenantId !== tenant.id) {
+      res.status(403).json({
+        valid: false,
+        error: 'Attestation token does not belong to this tenant.',
+      });
+      return;
+    }
+
+    res.json({
+      valid: true,
+      externalUserId: attestation.externalUserId,
+      deviceClass: attestation.deviceClass,
+      verifiedAt: attestation.verifiedAt.toISOString(),
+      expiresAt: attestation.expiresAt.toISOString(),
     });
   } catch (err) {
     next(err);

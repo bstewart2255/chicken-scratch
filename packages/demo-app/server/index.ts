@@ -110,8 +110,48 @@ app.post('/demo-api/recovery/lookup', (req, res) => {
  * with chickenScratch's backend directly (not trust the client-side pass),
  * but for demo purposes we trust the flow.
  */
-app.post('/demo-api/recovery/complete', (req, res) => {
-  const { userId, newPassword } = req.body ?? {};
+app.post('/demo-api/recovery/complete', async (req, res) => {
+  const { userId, attestationToken, newPassword } = req.body ?? {};
+  if (!userId || !attestationToken) {
+    return res.status(400).json({ error: 'userId and attestationToken required.' });
+  }
+  if (!CHICKEN_SCRATCH_API_KEY) {
+    return res.status(500).json({
+      error: 'CHICKEN_SCRATCH_API_KEY is not configured on the demo-app server.',
+    });
+  }
+
+  // Server-to-server attestation check. Fails if the token is forged,
+  // expired, or belongs to a different tenant. This is what makes recovery
+  // trustworthy — without it, an attacker who controls the browser could
+  // just POST here saying "I passed verify!" without actually passing.
+  try {
+    const response = await fetch(`${CHICKEN_SCRATCH_BASE_URL}/api/v1/attestation/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': CHICKEN_SCRATCH_API_KEY,
+      },
+      body: JSON.stringify({ token: attestationToken }),
+    });
+    const data = await response.json() as { valid?: boolean; externalUserId?: string; error?: string };
+    if (!response.ok || !data.valid) {
+      return res.status(401).json({
+        error: data.error || 'Attestation token failed validation. Recovery denied.',
+      });
+    }
+    // Cross-check: the attestation must be for the user the client claims.
+    // Prevents an attacker from handing us a valid attestation minted for
+    // some OTHER user they happen to control.
+    if (data.externalUserId !== userId) {
+      return res.status(403).json({ error: 'Attestation is for a different user.' });
+    }
+  } catch (err) {
+    return res.status(502).json({
+      error: `Failed to validate attestation: ${(err as Error).message}`,
+    });
+  }
+
   const user = findUserById(userId);
   if (!user) return res.status(404).json({ error: 'User not found.' });
   if (newPassword) updatePassword(userId, newPassword);
