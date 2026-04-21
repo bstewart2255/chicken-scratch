@@ -1,5 +1,5 @@
 import type { ChickenScratchOptions, AuthResult, RawSignatureData, DeviceCapabilities } from './types.js';
-import { ApiClient } from './api.js';
+import { ApiClient, ChickenScratchApiError } from './api.js';
 import { DrawingCanvas } from './canvas.js';
 import { UIRenderer, SHAPE_LABELS } from './ui.js';
 import { detectCapabilities } from './device.js';
@@ -112,6 +112,19 @@ export class ChickenScratch {
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.options.onError?.(error);
+      // Propagate errorCode + details (e.g. RECENT_VERIFY_REQUIRED +
+      // enrolledClasses) so callers can render the right UX.
+      if (err instanceof ChickenScratchApiError) {
+        return {
+          success: false,
+          enrolled: false,
+          message: err.message,
+          ...(err.errorCode ? { errorCode: err.errorCode } : {}),
+          ...(Array.isArray(err.details.enrolledClasses)
+            ? { enrolledClasses: err.details.enrolledClasses as string[] }
+            : {}),
+        };
+      }
       return { success: false, enrolled: false, message: error.message };
     }
   }
@@ -208,6 +221,17 @@ export class ChickenScratch {
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.options.onError?.(error);
+      if (err instanceof ChickenScratchApiError) {
+        return {
+          success: false,
+          authenticated: false,
+          message: err.message,
+          ...(err.errorCode ? { errorCode: err.errorCode } : {}),
+          ...(Array.isArray(err.details.enrolledClasses)
+            ? { enrolledClasses: err.details.enrolledClasses as string[] }
+            : {}),
+        };
+      }
       return { success: false, authenticated: false, message: error.message };
     }
   }

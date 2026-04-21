@@ -11,7 +11,16 @@ import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, del
 import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
 import { createSdkToken } from '../services/sdk-token.service.js';
 import { createAttestationToken, verifyAttestationToken } from '../services/attestation.service.js';
-import type { DeviceClass } from '@chicken-scratch/shared';
+import type { DeviceClass, TenantApiErrorCode } from '@chicken-scratch/shared';
+
+/**
+ * Shape every tenant-API error response consistently: a human-readable
+ * `error` string + a machine-readable `errorCode`. Customers branch on
+ * `errorCode`; the message text may change without notice.
+ */
+function errorBody(code: TenantApiErrorCode, message: string, extra?: Record<string, unknown>) {
+  return { success: false, error: message, errorCode: code, ...(extra ?? {}) };
+}
 import * as tenantRepo from '../db/repositories/tenant.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
 import { CURRENT_POLICY_VERSION } from '@chicken-scratch/shared';
@@ -43,7 +52,7 @@ router.post('/api/v1/sdk-token', async (req, res, next) => {
     const { externalUserId } = req.body;
 
     if (!externalUserId || typeof externalUserId !== 'string') {
-      res.status(400).json({ success: false, error: 'externalUserId is required.' });
+      res.status(400).json(errorBody('MISSING_FIELD', 'externalUserId is required.'));
       return;
     }
 
@@ -92,7 +101,7 @@ router.post('/api/v1/consent', async (req, res, next) => {
     const tenant = req.tenant!;
 
     if (!externalUserId || typeof externalUserId !== 'string') {
-      res.status(400).json({ success: false, error: 'externalUserId is required.' });
+      res.status(400).json(errorBody('MISSING_FIELD', 'externalUserId is required.'));
       return;
     }
 
@@ -146,8 +155,12 @@ router.delete('/api/v1/consent/:externalUserId', async (req, res, next) => {
     const { externalUserId } = req.params;
 
     const result = await withdrawConsent(tenant.id, externalUserId);
-    res.status(result.success ? 200 : 404).json({
-      success: result.success,
+    if (!result.success) {
+      res.status(404).json(errorBody('USER_NOT_FOUND', result.message, { externalUserId }));
+      return;
+    }
+    res.status(200).json({
+      success: true,
       externalUserId,
       message: result.message,
       deletionSummary: result.deletionSummary,
@@ -167,7 +180,7 @@ router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchem
     // Consent gate — block enrollment if user hasn't consented
     const consentError = await checkConsentGate(tenant.id, externalUserId);
     if (consentError) {
-      res.status(403).json({ success: false, error: consentError });
+      res.status(403).json(errorBody('CONSENT_REQUIRED', consentError));
       return;
     }
 
@@ -179,13 +192,20 @@ router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchem
       skipRecentVerify: skipRecentVerify === true,
     });
 
-    // 403 specifically for gate failures so clients can distinguish security
-    // rejection from a simple validation error.
+    // Map service-layer error codes to HTTP status. Gate failures return 403
+    // (security rejection); quality / already-enrolled return 400.
     const status = result.success
       ? 200
       : result.errorCode === 'RECENT_VERIFY_REQUIRED'
       ? 403
       : 400;
+
+    // Inferred error code if the service didn't set one (quality-gate rejections
+    // fall through as generic success: false without a code).
+    const errorCode: TenantApiErrorCode | undefined = result.success
+      ? undefined
+      : (result.errorCode as TenantApiErrorCode | undefined)
+        ?? (result.message.toLowerCase().includes('sample') ? 'QUALITY_GATE_FAILED' : 'INVALID_REQUEST');
 
     res.status(status).json({
       success: result.success,
@@ -194,7 +214,7 @@ router.post('/api/v1/enroll', enrollRateLimit, validate(TenantEnrollRequestSchem
       samplesRemaining: result.samplesRemaining,
       enrolled: result.enrolled,
       message: result.message,
-      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(errorCode ? { errorCode } : {}),
       ...(result.deviceClass ? { deviceClass: result.deviceClass } : {}),
       ...(result.enrolledClasses ? { enrolledClasses: result.enrolledClasses } : {}),
     });
@@ -211,19 +231,27 @@ router.post('/api/v1/enroll/shape', enrollRateLimit, validate(TenantShapeEnrollR
     // Consent gate
     const consentError = await checkConsentGate(tenant.id, externalUserId);
     if (consentError) {
-      res.status(403).json({ success: false, error: consentError });
+      res.status(403).json(errorBody('CONSENT_REQUIRED', consentError));
       return;
     }
 
     const { username, exists } = await resolveUser(tenant.id, externalUserId);
     if (!exists) {
-      res.status(404).json({ success: false, error: 'User not found. Enroll signature first.' });
+      res.status(404).json(errorBody('USER_NOT_FOUND', 'User not found. Enroll signature first.'));
       return;
     }
 
     const result = await enrollShape(username, shapeType, signatureData);
-    res.status(result.success ? 200 : 400).json({
-      success: result.success,
+    if (!result.success) {
+      res.status(400).json(errorBody(
+        'QUALITY_GATE_FAILED',
+        result.message,
+        { externalUserId },
+      ));
+      return;
+    }
+    res.status(200).json({
+      success: true,
       externalUserId,
       message: result.message,
     });
@@ -262,7 +290,7 @@ router.post('/api/v1/challenge', validate(TenantChallengeRequestSchema), async (
 
     const { exists } = await resolveUser(tenant.id, externalUserId);
     if (!exists) {
-      res.status(404).json({ success: false, error: 'User not found.' });
+      res.status(404).json(errorBody('USER_NOT_FOUND', 'User not found.'));
       return;
     }
 
@@ -286,19 +314,17 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
 
     const { username, userId, exists } = await resolveUser(tenant.id, externalUserId);
     if (!exists || !userId) {
-      res.status(404).json({ success: false, error: 'User not found.' });
+      res.status(404).json(errorBody('USER_NOT_FOUND', 'User not found.'));
       return;
     }
 
     // Lockout check — must happen before running verification
     const lockout = await checkLockout(userId);
     if (lockout.locked) {
-      res.status(423).json({
-        success: false,
-        error: lockoutMessage(lockout),
+      res.status(423).json(errorBody('LOCKED_OUT', lockoutMessage(lockout), {
         lockedUntil: lockout.lockedUntil,
         retryAfterSeconds: lockout.retryAfterSeconds,
-      });
+      }));
       return;
     }
 
@@ -336,7 +362,7 @@ router.post('/api/v1/verify', verifyRateLimit, validate(TenantVerifyFullRequestS
         ? 'Authentication successful.'
         : result.message || 'Authentication failed.',
       ...(attestationToken ? { attestationToken } : {}),
-      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(result.errorCode ? { errorCode: result.errorCode as TenantApiErrorCode } : {}),
       ...(result.enrolledClasses ? { enrolledClasses: result.enrolledClasses } : {}),
     });
   } catch (err) {
@@ -374,16 +400,16 @@ router.post('/api/v1/attestation/verify', async (req, res, next) => {
     // sdkTokenAuth middleware stashes sdkExternalUserId on the request when
     // authentication came from an SDK token; if absent, it was API-key auth.
     if ((req as Request & { sdkExternalUserId?: string }).sdkExternalUserId !== undefined) {
-      res.status(403).json({
-        success: false,
-        error: 'Attestation verification requires an API key, not an SDK token. Call this from your backend.',
-      });
+      res.status(403).json(errorBody(
+        'FORBIDDEN',
+        'Attestation verification requires an API key, not an SDK token. Call this from your backend.',
+      ));
       return;
     }
 
     const { token } = req.body ?? {};
     if (!token || typeof token !== 'string') {
-      res.status(400).json({ success: false, error: 'token is required.' });
+      res.status(400).json(errorBody('MISSING_FIELD', 'token is required.'));
       return;
     }
 
@@ -392,6 +418,7 @@ router.post('/api/v1/attestation/verify', async (req, res, next) => {
       res.status(401).json({
         valid: false,
         error: 'Attestation token is invalid or expired.',
+        errorCode: 'INVALID_ATTESTATION' satisfies TenantApiErrorCode,
       });
       return;
     }
@@ -402,6 +429,7 @@ router.post('/api/v1/attestation/verify', async (req, res, next) => {
       res.status(403).json({
         valid: false,
         error: 'Attestation token does not belong to this tenant.',
+        errorCode: 'ATTESTATION_TENANT_MISMATCH' satisfies TenantApiErrorCode,
       });
       return;
     }
@@ -428,7 +456,7 @@ router.delete('/api/v1/users/:externalUserId', async (req, res, next) => {
     const result = await deleteUser(tenant.id, externalUserId);
 
     if (!result.success) {
-      res.status(404).json({ success: false, error: result.message });
+      res.status(404).json(errorBody('USER_NOT_FOUND', result.message));
       return;
     }
 

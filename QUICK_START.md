@@ -217,6 +217,59 @@ curl -X DELETE https://chicken-scratch-production.up.railway.app/api/v1/users/us
   -H "X-API-Key: cs_live_your_key"
 ```
 
+## Verify your integration
+
+Before you wire the SDK into your app, run the integration-check script against your API key. It confirms auth, CORS, and error-code shapes in about five seconds:
+
+```bash
+# Clone the chicken-scratch repo (or download just scripts/integration-check.mjs)
+node scripts/integration-check.mjs \
+  --base-url https://chicken-scratch-production.up.railway.app \
+  --api-key cs_live_your_key_here
+```
+
+Expected output:
+
+```
+chickenScratch integration check against https://chicken-scratch-production.up.railway.app
+
+✓ Backend reachable (/health) — HTTP 200
+✓ API key accepted; SDK token issued — token cs_sdk_eyJhbGc...
+✓ Enrollment status endpoint — enrolled=false, samples=0/3
+✓ Attestation endpoint returns INVALID_ATTESTATION on bogus tokens
+✓ Consent status endpoint — hasConsented=false
+✓ 400 errors include errorCode=MISSING_FIELD
+✓ Invalid API keys return errorCode=UNAUTHORIZED
+
+All 7 checks passed.
+```
+
+If any check fails, the script exits non-zero with a specific message — usually "wrong API key," "wrong base URL," or "CORS not whitelisted for your origin."
+
+## Error codes
+
+Every non-2xx response from `/api/v1/*` includes a machine-readable `errorCode` alongside the human-readable `error` / `message`. Branch your UX off the code, not the text (the text may change).
+
+| errorCode                      | HTTP | When it fires |
+|---|---|---|
+| `MISSING_FIELD`                | 400  | Required body field absent |
+| `INVALID_REQUEST`              | 400  | Request body failed schema validation |
+| `UNAUTHORIZED`                 | 401  | API key / SDK token missing, invalid, or expired |
+| `FORBIDDEN`                    | 403  | Wrong auth method for the endpoint, or tenant inactive |
+| `CONSENT_REQUIRED`             | 403  | User has no active consent record |
+| `RECENT_VERIFY_REQUIRED`       | 403  | Add-device gate: user must verify on an existing class first |
+| `USER_NOT_FOUND`               | 404  | externalUserId has no record in your tenant |
+| `NOT_ENROLLED`                 | 404  | User has no baselines; cannot verify |
+| `LOCKED_OUT`                   | 423  | User exceeded failed-attempt threshold (default: 5 in 15 min → 30 min lockout) |
+| `RATE_LIMITED`                 | 429  | Too many requests in the rate-limit window |
+| `QUALITY_GATE_FAILED`          | 400  | Signature too short, too small, or too few points |
+| `ALREADY_ENROLLED`             | 400  | Same-class re-enrollment attempted |
+| `DEVICE_CLASS_MISMATCH`        | 200  | User verifying on a class they haven't enrolled (response includes `enrolledClasses`) |
+| `INVALID_ATTESTATION`          | 401  | Attestation token forged, expired, or malformed |
+| `ATTESTATION_TENANT_MISMATCH`  | 403  | Attestation token minted for a different tenant |
+
+The SDK propagates `errorCode` on `AuthResult` for both `enroll()` and `verify()`. For API calls from your backend, catch `ChickenScratchApiError` (exported from `@chicken-scratch/sdk`) — it has `.errorCode` and `.details` populated.
+
 ## Interactive API Docs
 
 Full OpenAPI documentation with try-it-out is available at:

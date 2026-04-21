@@ -45,6 +45,7 @@ function createRateLimiter(maxRequests: number, windowMs: number) {
       res.status(429).json({
         success: false,
         error: 'Rate limit exceeded. Please slow down.',
+        errorCode: 'RATE_LIMITED',
         retryAfterSeconds: resetSecs,
       });
       return;

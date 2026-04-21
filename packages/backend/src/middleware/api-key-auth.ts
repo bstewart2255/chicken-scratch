@@ -32,6 +32,7 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
     res.status(401).json({
       success: false,
       error: 'Missing API key. Include X-API-Key or Authorization: Bearer header.',
+      errorCode: 'UNAUTHORIZED',
     });
     return;
   }
@@ -58,6 +59,7 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
         res.status(401).json({
           success: false,
           error: 'Invalid or revoked API key.',
+          errorCode: 'UNAUTHORIZED',
         });
         return;
       }
@@ -70,6 +72,7 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
         res.status(403).json({
           success: false,
           error: 'Tenant is inactive.',
+          errorCode: 'FORBIDDEN',
         });
         return;
       }

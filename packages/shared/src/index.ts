@@ -25,6 +25,7 @@ export type {
   VerifyRequest,
   VerifyResponse,
   DeviceClass,
+  TenantApiErrorCode,
 } from './types/auth.js';
 export { ALL_DEVICE_CLASSES, ADD_DEVICE_RECENT_VERIFY_WINDOW_MS } from './types/auth.js';
 

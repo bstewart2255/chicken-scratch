@@ -30,6 +30,7 @@ export function sdkTokenAuth(req: Request, res: Response, next: NextFunction): v
     res.status(401).json({
       success: false,
       error: 'Invalid or expired SDK token. Request a new one from your backend.',
+      errorCode: 'UNAUTHORIZED',
     });
     return;
   }
@@ -40,6 +41,7 @@ export function sdkTokenAuth(req: Request, res: Response, next: NextFunction): v
         res.status(403).json({
           success: false,
           error: 'Tenant is inactive.',
+          errorCode: 'FORBIDDEN',
         });
         return;
       }

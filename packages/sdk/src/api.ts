@@ -1,5 +1,25 @@
 import type { RawSignatureData, ChallengeResponse } from './types.js';
 
+/**
+ * Thrown by the SDK's internal API calls when the chickenScratch backend
+ * returns a non-success response. Preserves the machine-readable errorCode
+ * and any extra fields (e.g. enrolledClasses on DEVICE_CLASS_MISMATCH,
+ * retryAfterSeconds on RATE_LIMITED/LOCKED_OUT) so callers can branch.
+ */
+export class ChickenScratchApiError extends Error {
+  readonly statusCode: number;
+  readonly errorCode: string | undefined;
+  readonly details: Record<string, unknown>;
+
+  constructor(message: string, statusCode: number, errorCode: string | undefined, details: Record<string, unknown>) {
+    super(message);
+    this.name = 'ChickenScratchApiError';
+    this.statusCode = statusCode;
+    this.errorCode = errorCode;
+    this.details = details;
+  }
+}
+
 export class ApiClient {
   constructor(
     private baseUrl: string,
@@ -21,7 +41,12 @@ export class ApiClient {
     });
     const data = await res.json();
     if (!res.ok && !data.success) {
-      throw new Error(data.error || data.message || `Request failed: ${res.status}`);
+      throw new ChickenScratchApiError(
+        data.error || data.message || `Request failed: ${res.status}`,
+        res.status,
+        typeof data.errorCode === 'string' ? data.errorCode : undefined,
+        data as Record<string, unknown>,
+      );
     }
     return data as T;
   }
