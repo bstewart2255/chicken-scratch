@@ -1,6 +1,9 @@
-// instrument MUST be the first import — it initializes Sentry + OpenTelemetry
-// instrumentation, which needs to hook into module loading before any other
-// code runs. Side-effect import intentionally.
+// Sentry instrumentation is normally loaded via Node's `--import` flag (see
+// the "start" / "dev" scripts in package.json), which is what Sentry v10+
+// requires for full Express/OpenTelemetry instrumentation. This side-effect
+// import is a fallback: if someone runs `node dist/index.js` directly without
+// --import, they still get basic error capture (no auto-spans). The import
+// is idempotent — Node's module cache ensures Sentry.init runs exactly once.
 import './instrument.js';
 import 'dotenv/config';
 import { createApp } from './app.js';
