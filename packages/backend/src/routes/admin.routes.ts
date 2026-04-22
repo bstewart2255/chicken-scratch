@@ -303,4 +303,26 @@ router.post('/api/admin/tenants/:id/reactivate', async (req, res, next) => {
   }
 });
 
+// ── User deletion (admin-scoped, by internal username) ──────────────
+
+router.delete('/api/admin/users/:username', async (req, res, next) => {
+  try {
+    const user = await userRepo.findByUsername(req.params.username);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    const summary = await userRepo.deleteUser(user.id, user.username);
+    res.json({
+      success: true,
+      username: user.username,
+      userId: user.id,
+      deletionSummary: summary,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

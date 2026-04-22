@@ -330,15 +330,6 @@ export function DemoMobile() {
 
   if (phase === 'result') {
     const passed = verifyResult?.authenticated;
-    const breakdown = verifyResult?.scoreBreakdown;
-    const shapeLabel = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-    const rowStyle = {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '10px 14px',
-      fontSize: 15,
-    };
 
     // Four outcomes:
     // - normal + passed:   "Verified!" (green) — offer forger round
@@ -372,37 +363,15 @@ export function DemoMobile() {
           <p style={{ color: '#666', marginBottom: 24, fontSize: 14 }}>
             {summary}
           </p>
-          {breakdown && (
-            <div style={{
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
-              borderRadius: 10,
-              margin: '0 0 20px',
-              overflow: 'hidden',
-              textAlign: 'left',
-            }}>
-              <div style={{ ...rowStyle, borderBottom: '1px solid #e5e7eb' }}>
-                <span style={{ color: '#1a1a2e', fontWeight: 500 }}>Signature</span>
-                <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                  {breakdown.signature}%
-                </span>
-              </div>
-              {breakdown.shapes.map((s, i) => (
-                <div
-                  key={s.type}
-                  style={{
-                    ...rowStyle,
-                    borderBottom: i < breakdown.shapes.length - 1 ? '1px solid #e5e7eb' : 'none',
-                  }}
-                >
-                  <span style={{ color: '#1a1a2e', fontWeight: 500 }}>{shapeLabel(s.type)}</span>
-                  <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                    {s.score}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Per-modality similarity percentages are intentionally hidden
+              from the end-user demo surface. Industry biometric products
+              (Face ID, Windows Hello, enterprise DSV vendors) expose a
+              pass/fail outcome only — showing a "81%" on a rejected
+              forgery invites the misreading that the attempt was close
+              to passing, when in fact the scale has a natural floor.
+              Numeric breakdowns remain available in the diagnostics
+              dashboard for integrators and internal analysis. */}
+
           {/* Primary CTA: offer forger round after a legitimate verify pass; */}
           {/* otherwise offer another forger attempt or a fresh demo. */}
           {!isForgeryRound && passed && (

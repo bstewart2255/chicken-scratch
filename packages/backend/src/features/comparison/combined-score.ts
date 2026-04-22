@@ -3,7 +3,8 @@ import { THRESHOLDS } from '@chicken-scratch/shared';
 
 /**
  * Compute the final authentication score combining signature and shape scores.
- * finalScore = signatureScore * 0.6 + mean(shapeScores) * 0.4
+ * finalScore = signatureScore * SIGNATURE_WEIGHT + mean(shapeScores) * SHAPE_WEIGHT
+ * (currently 0.70 / 0.30; see THRESHOLDS in shared constants).
  *
  * Also enforces per-modality minimums: both signature and each shape
  * must meet their minimum threshold for authentication to pass.
