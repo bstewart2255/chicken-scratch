@@ -6,7 +6,13 @@ export const PRIVACY_POLICY_URL = 'https://chickenscratch.io/privacy' as const;
 
 export const THRESHOLDS = {
   // Authentication
-  AUTH_SCORE_DEFAULT: 85,
+  // Temporarily relaxed from 85 → 80 during the PR #2 Mahalanobis rollout:
+  // per-user variance scaling changes the score distribution, and the old
+  // 85 was tuned for the legacy relative-error formula. A post-deploy
+  // calibration pass (see docs/scoring-research.md §4) will retune based on
+  // actual genuine vs. forgery score histograms. Lowering in the short term
+  // prevents locking out genuine users during the recalibration window.
+  AUTH_SCORE_DEFAULT: 80,
   ENROLLMENT_SAMPLES_REQUIRED: 3,
 
   // Temporal (ms)
@@ -62,11 +68,13 @@ export const THRESHOLDS = {
   SHAPE_WEIGHT: 0.3,
   SHAPE_BIOMETRIC_WEIGHT: 0.7,
   SHAPE_SPECIFIC_WEIGHT: 0.3,
-  SHAPE_MIN_THRESHOLD: 40,
-  SIGNATURE_MIN_THRESHOLD: 75,
+  // Per-modality minimums (signature + shapes) — also relaxed during the
+  // PR #2 Mahalanobis rollout. See AUTH_SCORE_DEFAULT comment above.
+  SHAPE_MIN_THRESHOLD: 35,
+  SIGNATURE_MIN_THRESHOLD: 65,
 
-  // Drawing scoring (now with shape-specific features)
-  DRAWING_MIN_THRESHOLD: 40,
+  // Drawing scoring (now with shape-specific features) — relaxed for v3+Mahalanobis
+  DRAWING_MIN_THRESHOLD: 35,
   DRAWING_BIOMETRIC_WEIGHT: 0.7,
   DRAWING_SPECIFIC_WEIGHT: 0.3,
 

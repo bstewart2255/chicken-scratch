@@ -149,47 +149,51 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
 }
 
 /**
- * Default standard deviations for single-sample demo baselines.
- * Without these, a 1-sample baseline would have stddev=0 for everything,
- * making verification impossibly strict. Populated by walking a dummy feature
- * set so the keys always match the real extractors — no hand-maintained map.
+ * Default per-feature standard deviations derived from a baseline's own
+ * magnitudes. Used in two situations:
+ *   1. Demo single-sample enrollment — variance across 1 sample is 0 for
+ *      every field, which would make verification impossibly strict under
+ *      Mahalanobis scaling.
+ *   2. Shape baselines — each shape type stores only one sample per user
+ *      (ON CONFLICT DO UPDATE in upsert), so we can't compute real variance.
+ *
+ * Strategy: per-bucket coefficient-of-variation priors × |baseline value|.
+ * A feature with baseline 2000ms and a timing CV of 0.15 gets a 300ms stddev.
+ * A feature with baseline 0.3 and a timing CV of 0.15 gets a 0.045 stddev.
+ * This keeps tolerance proportional to feature magnitude, which is what we
+ * want — the old "fixed 0.12 absolute stddev for everything" approach was
+ * nonsense across the wildly different magnitudes in the feature set.
  */
-function getDefaultStdDevs(): Record<string, number> {
-  // Per-bucket default std-dev priors. Tuned for 0-1 normalized features;
-  // features with larger natural ranges (durations in ms, bbox in px) will
-  // be scaled down by the matcher's relative-error formula anyway.
-  const DEFAULT = {
-    timing: 0.12,
-    kinematic: 0.15,
-    geometric: 0.10,
+function getDefaultStdDevs(baseline: AllFeatures): Record<string, number> {
+  // Coefficient-of-variation priors per bucket. These are informed guesses;
+  // they'll be replaced by empirically-measured values after the first
+  // N genuine verify attempts worth of calibration data (see research doc
+  // section 4 — post-PR calibration pass).
+  const CV_PRIOR = {
+    timing: 0.15,
+    kinematic: 0.18,
+    geometric: 0.12,
     pressure: 0.10,
   } as const;
 
-  // Synthesize an empty feature set to get the canonical key list at runtime.
-  // Cheaper and less brittle than duplicating the interface as a hard-coded list.
-  const synthetic = extractAllFeatures({
-    strokes: [],
-    canvasSize: { width: 300, height: 150 },
-    deviceCapabilities: {
-      supportsPressure: true,
-      supportsTouch: false,
-      inputMethod: 'stylus',
-      browser: '',
-      os: '',
-    },
-    capturedAt: new Date().toISOString(),
-  });
-
   const devs: Record<string, number> = {};
-  for (const key of Object.keys(synthetic.timing)) devs[`timing.${key}`] = DEFAULT.timing;
-  for (const key of Object.keys(synthetic.kinematic)) devs[`kinematic.${key}`] = DEFAULT.kinematic;
-  for (const key of Object.keys(synthetic.geometric)) devs[`geometric.${key}`] = DEFAULT.geometric;
-  // Pressure keys are known even though synthetic.pressure is null here.
-  const pressureKeys = [
-    'avgPressure', 'maxPressure', 'minPressure', 'pressureStd',
-    'contactTimeRatio', 'pressureBuildupRate', 'pressureReleaseRate',
-  ];
-  for (const key of pressureKeys) devs[`pressure.${key}`] = DEFAULT.pressure;
+
+  const applyBucket = <T extends Record<string, number>>(
+    bucket: string,
+    obj: T,
+    cv: number,
+  ): void => {
+    for (const [key, val] of Object.entries(obj)) {
+      devs[`${bucket}.${key}`] = cv * Math.abs(val);
+    }
+  };
+
+  applyBucket('timing', baseline.timing as unknown as Record<string, number>, CV_PRIOR.timing);
+  applyBucket('kinematic', baseline.kinematic as unknown as Record<string, number>, CV_PRIOR.kinematic);
+  applyBucket('geometric', baseline.geometric as unknown as Record<string, number>, CV_PRIOR.geometric);
+  if (baseline.pressure !== null) {
+    applyBucket('pressure', baseline.pressure as unknown as Record<string, number>, CV_PRIOR.pressure);
+  }
 
   return devs;
 }
@@ -353,9 +357,11 @@ export async function enrollSample(
 
     const avgFeatures = averageFeatures(allFeatureSets);
     const avgML = averageMLFeatures(allMLSets);
-    // For demo (single sample), use default stddevs to avoid zero-tolerance scoring
+    // For demo (single sample), derive stddevs from the baseline's own
+    // magnitudes via CV priors — variance across 1 sample is 0, which would
+    // make Mahalanobis scoring infinitely strict.
     const featureStdDevs = isDemo && samples.length === 1
-      ? getDefaultStdDevs()
+      ? getDefaultStdDevs(avgFeatures)
       : computeStdDevs(allFeatureSets);
 
     await sigRepo.upsertBaseline(
@@ -438,7 +444,20 @@ export async function enrollShape(
     deviceClass,
   );
 
-  await shapeRepo.upsertShapeBaseline(user.id, shapeType, biometricFeatures, shapeFeatures, deviceClass);
+  // Shapes enroll one sample per type (see shape_samples ON CONFLICT DO UPDATE),
+  // so we can't compute real cross-sample variance. Derive stddevs from the
+  // baseline's own magnitudes via CV priors — matches the demo path for
+  // signatures. If you later collect multiple shape samples per user, swap
+  // this for the real computeStdDevs([...]) over the sample list.
+  const biometricStdDevs = getDefaultStdDevs(biometricFeatures);
+  await shapeRepo.upsertShapeBaseline(
+    user.id,
+    shapeType,
+    biometricFeatures,
+    shapeFeatures,
+    biometricStdDevs,
+    deviceClass,
+  );
 
   const enrolledSamples = await shapeRepo.getShapeSamples(user.id, deviceClass);
   const enrolledTypes = new Set(enrolledSamples.map(s => s.shape_type));

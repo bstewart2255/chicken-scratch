@@ -62,8 +62,9 @@ export async function verifySignature(
 
   const attemptFeatures = extractAllFeatures(signatureData);
   const baselineFeatures = JSON.parse(baseline.avg_features) as AllFeatures;
+  const baselineStdDevs = JSON.parse(baseline.feature_std_devs) as Record<string, number>;
 
-  const comparison = compareFeatures(baselineFeatures, attemptFeatures);
+  const comparison = compareFeatures(baselineFeatures, attemptFeatures, baselineStdDevs);
   const threshold = THRESHOLDS.AUTH_SCORE_DEFAULT;
   const authenticated = comparison.score >= threshold;
 
@@ -154,7 +155,8 @@ export async function verifyFull(
 
   const attemptSigFeatures = extractAllFeatures(signatureData);
   const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
-  const sigComparison = compareFeatures(baselineSigFeatures, attemptSigFeatures);
+  const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
+  const sigComparison = compareFeatures(baselineSigFeatures, attemptSigFeatures, baselineSigStdDevs);
   const signatureScore = sigComparison.score;
 
   const shapeScores: ShapeScoreBreakdown[] = [];
@@ -172,14 +174,21 @@ export async function verifyFull(
     const attemptShapeFeatures = extractShapeSpecificFeatures(strokes, itemType);
     const baselineBiometric = JSON.parse(shapeBaseline.avg_biometric_features) as AllFeatures;
     const baselineShapeFeatures = JSON.parse(shapeBaseline.avg_shape_features) as ShapeSpecificFeatures;
+    // Shape baselines hold per-user biometric stddevs (migration 019 + CV-prior
+    // defaults at enrollment time, since shapes enroll only one sample).
+    // May be null for pre-migration rows; the matcher falls back cleanly.
+    const baselineShapeStdDevs = shapeBaseline.biometric_std_devs
+      ? JSON.parse(shapeBaseline.biometric_std_devs) as Record<string, number>
+      : undefined;
 
-    const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric);
+    const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric, baselineShapeStdDevs);
     const shapeFeatureScore = compareShapeFeatures(baselineShapeFeatures, attemptShapeFeatures);
     const { biometricScore, shapeScore, combinedScore } = computeShapeScore(
       baselineBiometric,
       attemptBiometric,
       baselineShapeFeatures,
       attemptShapeFeatures,
+      baselineShapeStdDevs,
     );
 
     shapeScores.push({

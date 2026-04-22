@@ -35,14 +35,20 @@ export function compareShapeFeatures(
 /**
  * Compute the combined shape score: biometric 70% + shape-specific 30%.
  * Returns 0-100.
+ *
+ * Accepts an optional per-user stddev map for Mahalanobis scaling of the
+ * biometric sub-score. Passed through to `compareFeatures`. Keys follow
+ * the "<bucket>.<feature>" convention; when omitted, the matcher falls back
+ * to the legacy relative-error formula for the biometric portion.
  */
 export function computeShapeScore(
   baselineBiometric: AllFeatures,
   attemptBiometric: AllFeatures,
   baselineShape: ShapeSpecificFeatures,
   attemptShape: ShapeSpecificFeatures,
+  biometricStdDevs?: Record<string, number>,
 ): { biometricScore: number; shapeScore: number; combinedScore: number } {
-  const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric);
+  const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric, biometricStdDevs);
   const biometricScore = biometricComparison.score;
   const shapeScore = compareShapeFeatures(baselineShape, attemptShape);
 

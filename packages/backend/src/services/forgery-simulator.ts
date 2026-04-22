@@ -189,10 +189,12 @@ function perturbSignatureData(
 
 interface EnrolledData {
   sigBaseline: AllFeatures;
+  sigStdDevs: Record<string, number>;
   sigSampleData: RawSignatureData;
   shapeData: {
     type: ChallengeItemType;
     baseline: { biometric: AllFeatures; shape: ShapeSpecificFeatures };
+    biometricStdDevs: Record<string, number> | undefined;
     sampleData: RawSignatureData;
   }[];
 }
@@ -204,7 +206,7 @@ function scoreForgedAttempt(
   // Forge signature
   const forgedSig = perturbSignatureData(enrolled.sigSampleData, level);
   const forgedSigFeatures = extractAllFeatures(forgedSig);
-  const sigComparison = compareFeatures(enrolled.sigBaseline, forgedSigFeatures);
+  const sigComparison = compareFeatures(enrolled.sigBaseline, forgedSigFeatures, enrolled.sigStdDevs);
   const signatureScore = sigComparison.score;
 
   // Forge each shape
@@ -222,6 +224,7 @@ function scoreForgedAttempt(
       forgedBiometric,
       shape.baseline.shape,
       forgedShapeFeatures,
+      shape.biometricStdDevs,
     );
 
     shapeScores.push({
@@ -294,6 +297,7 @@ export async function runForgerySimulation(
   // Use first signature sample as the source for perturbation
   const sigSampleData = JSON.parse(sigSamples[0].stroke_data) as RawSignatureData;
   const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
+  const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
 
   // Load shape/drawing enrolled data
   const shapeData: EnrolledData['shapeData'] = [];
@@ -310,12 +314,16 @@ export async function runForgerySimulation(
         biometric: JSON.parse(shapeBaseline.avg_biometric_features) as AllFeatures,
         shape: JSON.parse(shapeBaseline.avg_shape_features) as ShapeSpecificFeatures,
       },
+      biometricStdDevs: shapeBaseline.biometric_std_devs
+        ? JSON.parse(shapeBaseline.biometric_std_devs) as Record<string, number>
+        : undefined,
       sampleData: JSON.parse(shapeSample.stroke_data) as RawSignatureData,
     });
   }
 
   const enrolled: EnrolledData = {
     sigBaseline: baselineSigFeatures,
+    sigStdDevs: baselineSigStdDevs,
     sigSampleData,
     shapeData,
   };

@@ -21,6 +21,17 @@ export interface ShapeBaselineRow {
   shape_type: string;
   avg_biometric_features: string;
   avg_shape_features: string;
+  /**
+   * Per-user per-feature stddevs for Mahalanobis scaling of the biometric
+   * sub-score. Null when the baseline pre-dates migration 019 (v3 truncated
+   * prod, so in practice null only appears on local/staging data enrolled
+   * before the deploy). The matcher handles null by falling back to the
+   * legacy relative-error formula.
+   *
+   * Format: encrypted JSON of Record<string, number> keyed "<bucket>.<feature>"
+   * (e.g. "timing.rhythmConsistency"), identical shape to baselines.feature_std_devs.
+   */
+  biometric_std_devs: string | null;
   device_class: DeviceClass;
   created_at: string;
   updated_at: string;
@@ -40,6 +51,7 @@ function decryptBaselineRow(row: ShapeBaselineRow): ShapeBaselineRow {
     ...row,
     avg_biometric_features: decrypt(row.avg_biometric_features),
     avg_shape_features: row.avg_shape_features ? decrypt(row.avg_shape_features) : row.avg_shape_features,
+    biometric_std_devs: row.biometric_std_devs ? decrypt(row.biometric_std_devs) : row.biometric_std_devs,
   };
 }
 
@@ -104,15 +116,17 @@ export async function upsertShapeBaseline(
   shapeType: ChallengeItemType,
   avgBiometricFeatures: AllFeatures,
   avgShapeFeatures: ShapeSpecificFeatures | null,
+  biometricStdDevs: Record<string, number> | null,
   deviceClass: DeviceClass,
 ): Promise<ShapeBaselineRow> {
   const id = uuid();
   const result = await query<ShapeBaselineRow>(`
-    INSERT INTO shape_baselines (id, user_id, shape_type, avg_biometric_features, avg_shape_features, device_class)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO shape_baselines (id, user_id, shape_type, avg_biometric_features, avg_shape_features, biometric_std_devs, device_class)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT(user_id, shape_type, device_class) DO UPDATE SET
       avg_biometric_features = EXCLUDED.avg_biometric_features,
       avg_shape_features = EXCLUDED.avg_shape_features,
+      biometric_std_devs = EXCLUDED.biometric_std_devs,
       updated_at = NOW()
     RETURNING *
   `, [
@@ -121,6 +135,7 @@ export async function upsertShapeBaseline(
     shapeType,
     encryptJson(avgBiometricFeatures),
     avgShapeFeatures !== null ? encryptJson(avgShapeFeatures) : JSON.stringify(null),
+    biometricStdDevs !== null ? encryptJson(biometricStdDevs) : null,
     deviceClass,
   ]);
   return result.rows[0];

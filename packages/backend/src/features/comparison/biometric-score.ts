@@ -22,69 +22,144 @@ export class FeatureVersionMismatchError extends Error {
   }
 }
 
+// Tolerance multiplier for Mahalanobis-style scaling. Attempts within
+// `k * stddev` of the baseline score near 1.0; beyond `k * stddev` the
+// similarity falls off linearly to 0. k = 2.5 means "up to 2.5 standard
+// deviations is considered 'you' with continuous confidence decay."
+const MAHALANOBIS_K = 2.5;
+
+// Minimum absolute stddev used in the tolerance floor. Prevents divide-by-
+// zero on features that happened to be identical across all N enrollment
+// samples (common for discrete counts like strokeCount on a user who always
+// draws with 1 stroke).
+const MIN_ABS_STDDEV = 1e-3;
+
+// Fractional floor on tolerance relative to baseline magnitude. Ensures
+// even a "zero variance" feature gets at least this fraction of its
+// baseline magnitude as tolerance (5% is a conservative prior).
+const MIN_REL_STDDEV = 0.05;
+
 /**
- * Compare a single numeric feature: 1 - |a - b| / max(|a|, |b|).
- * Returns a similarity score from 0 (completely different) to 1 (identical).
+ * Per-user variance-scaled similarity for a single feature.
+ *
+ * Returns a 0-1 score:
+ *   attempt == baseline         → 1.0
+ *   |attempt - baseline| == k·σ → 0.0
+ *   beyond k·σ                  → 0.0 (clamped)
+ *
+ * The effective stddev is floored to avoid pathological cases where the
+ * user's enrollments happened to be identical (σ = 0), which would otherwise
+ * demand exact-match verification. Floor = max(MIN_ABS_STDDEV, MIN_REL_STDDEV·|baseline|).
+ *
+ * When `stored_stddev` is undefined (baseline pre-dates Mahalanobis wiring,
+ * or a feature was added without a std-dev entry), falls back to the old
+ * relative-error formula — `1 - |a - b| / max(|a|, |b|)` — so ungated
+ * comparisons don't silently score 0.
  */
-function featureSimilarity(stored: number, attempt: number): number {
-  const maxVal = Math.max(Math.abs(stored), Math.abs(attempt));
-  if (maxVal === 0) return 1; // both zero = identical
-  return 1 - Math.abs(stored - attempt) / maxVal;
+function featureSimilarityMahalanobis(
+  stored: number,
+  attempt: number,
+  storedStddev: number | undefined,
+): number {
+  if (storedStddev === undefined) {
+    // Forward-compat fallback: old relative-error formula.
+    const maxVal = Math.max(Math.abs(stored), Math.abs(attempt));
+    if (maxVal === 0) return 1;
+    return Math.max(0, 1 - Math.abs(stored - attempt) / maxVal);
+  }
+
+  const absFloor = MIN_ABS_STDDEV;
+  const relFloor = MIN_REL_STDDEV * Math.abs(stored);
+  const effectiveStddev = Math.max(storedStddev, absFloor, relFloor);
+  const tolerance = MAHALANOBIS_K * effectiveStddev;
+
+  if (tolerance === 0) {
+    // Shouldn't happen given the floor, but defensive.
+    return stored === attempt ? 1 : 0;
+  }
+
+  const diff = Math.abs(stored - attempt);
+  return Math.max(0, 1 - diff / tolerance);
 }
 
-/** Average similarity across all numeric fields of two objects */
-function objectSimilarity(stored: Record<string, number>, attempt: Record<string, number>): number {
+/**
+ * Average similarity across all numeric fields of two objects.
+ * `stdDevs` is the pre-computed per-feature stddev map from the baseline
+ * row, keyed "<bucket>.<feature>" (e.g. "timing.rhythmConsistency").
+ */
+function objectSimilarity(
+  stored: Record<string, number>,
+  attempt: Record<string, number>,
+  stdDevs: Record<string, number> | undefined,
+  bucketPrefix: string,
+): number {
   const keys = Object.keys(stored);
   if (keys.length === 0) return 0;
   let total = 0;
   for (const key of keys) {
-    total += featureSimilarity(stored[key], attempt[key] ?? 0);
+    const stdKey = `${bucketPrefix}.${key}`;
+    const std = stdDevs?.[stdKey];
+    total += featureSimilarityMahalanobis(stored[key], attempt[key] ?? 0, std);
   }
   return total / keys.length;
 }
 
 /**
- * Compare biometric features between a stored baseline and an authentication attempt.
- * Returns a 0-100 score with breakdown by bucket.
+ * Compare biometric features between a stored baseline and an authentication
+ * attempt. Returns a 0-100 score with per-bucket breakdown.
+ *
+ * The optional `stdDevs` parameter enables per-user Mahalanobis-style variance
+ * scaling: features that vary a lot across the user's enrollment samples get
+ * more tolerance on the attempt, and features the user draws consistently
+ * get tighter tolerance. Keys are "<bucket>.<feature>" (e.g. "timing.rhythmConsistency").
+ * When `stdDevs` is omitted or a specific key is missing, the matcher falls
+ * back to the old relative-error formula for that feature.
  *
  * Throws FeatureVersionMismatchError if the two sides were extracted under
  * different feature-schema versions.
  */
-export function compareFeatures(baseline: AllFeatures, attempt: AllFeatures): FeatureComparison {
-  // Runtime version guard — see class doc above.
+export function compareFeatures(
+  baseline: AllFeatures,
+  attempt: AllFeatures,
+  stdDevs?: Record<string, number>,
+): FeatureComparison {
   const baselineVersion = baseline.metadata?.featureVersion ?? 'unknown';
   const attemptVersion = attempt.metadata?.featureVersion ?? THRESHOLDS.FEATURE_VERSION;
   if (baselineVersion !== attemptVersion) {
     throw new FeatureVersionMismatchError(baselineVersion, attemptVersion);
   }
 
-  // Pressure comparison (null if either lacks pressure data — bucket is skipped
-  // and remaining bucket weights renormalize below).
   let pressureScore: number | null = null;
   if (baseline.pressure && attempt.pressure) {
     pressureScore = objectSimilarity(
       baseline.pressure as unknown as Record<string, number>,
       attempt.pressure as unknown as Record<string, number>,
+      stdDevs,
+      'pressure',
     );
   }
 
   const timingScore = objectSimilarity(
     baseline.timing as unknown as Record<string, number>,
     attempt.timing as unknown as Record<string, number>,
+    stdDevs,
+    'timing',
   );
 
   const kinematicScore = objectSimilarity(
     baseline.kinematic as unknown as Record<string, number>,
     attempt.kinematic as unknown as Record<string, number>,
+    stdDevs,
+    'kinematic',
   );
 
   const geometricScore = objectSimilarity(
     baseline.geometric as unknown as Record<string, number>,
     attempt.geometric as unknown as Record<string, number>,
+    stdDevs,
+    'geometric',
   );
 
-  // Weighted final score. Weights are declared in thresholds.ts and renormalize
-  // automatically when pressure is unavailable.
   const score = pressureScore !== null
     ? (pressureScore * THRESHOLDS.WEIGHT_WITH_PRESSURE.pressure +
        timingScore * THRESHOLDS.WEIGHT_WITH_PRESSURE.timing +
@@ -102,8 +177,14 @@ export function compareFeatures(baseline: AllFeatures, attempt: AllFeatures): Fe
       kinematic: Math.round(kinematicScore * 100 * 100) / 100,
       geometric: Math.round(geometricScore * 100 * 100) / 100,
     },
-    // Pass through the attempt's diagnostic flags so callers can surface
-    // anomaly signals alongside the match result.
     diagnosticFlags: attempt.diagnosticFlags,
   };
 }
+
+// Exported for tests.
+export const __test__ = {
+  featureSimilarityMahalanobis,
+  MAHALANOBIS_K,
+  MIN_ABS_STDDEV,
+  MIN_REL_STDDEV,
+};
