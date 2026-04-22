@@ -99,7 +99,7 @@
 }
 .nav-links { display: flex; gap: 28px; align-items: center; font-size: 14px; color: var(--ink-2); }
 .nav-links a:hover { color: var(--ink); }
-.nav-cta {
+.landing .nav-cta {
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.04em;
@@ -108,6 +108,7 @@
   color: var(--paper);
   border-radius: 999px;
 }
+.landing .nav-cta:hover { color: var(--paper); }
 
 /* -------- SHARED TYPE -------- */
 .eyebrow {
@@ -174,9 +175,13 @@
   transition: transform 120ms ease, background 120ms ease;
 }
 .btn:hover { transform: translateY(-1px); }
-.btn-primary { background: var(--ink); color: var(--paper); }
-.btn-primary:hover { background: var(--accent-ink); }
-.btn-ghost { background: transparent; color: var(--ink); border-color: var(--rule-2); }
+/* Specificity note: `.landing a { color: inherit }` is 0,1,1 and would
+   override the button classes below (0,1,0) for anchor-styled buttons.
+   Doubling the class in these selectors (0,2,0) + scoping under .landing
+   keeps them winning regardless of element type (<a> or <button>). */
+.landing .btn.btn-primary { background: var(--ink); color: var(--paper); }
+.landing .btn.btn-primary:hover { background: var(--accent-ink); color: var(--paper); }
+.landing .btn.btn-ghost { background: transparent; color: var(--ink); border-color: var(--rule-2); }
 .btn .arrow { font-family: var(--mono); }
 
 .hero-ctas { display: flex; gap: 12px; margin-top: 32px; align-items: center; flex-wrap: wrap; }
