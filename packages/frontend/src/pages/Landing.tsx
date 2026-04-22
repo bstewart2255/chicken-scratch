@@ -1,944 +1,818 @@
-import { useState, useEffect, useRef } from 'react';
-import { createDemoSession, getSession } from '../api/client';
+import { useEffect, useRef, useState } from 'react';
+import { createDemoSession } from '../api/client';
+import './Landing.css';
 
-// Handwritten display face — loaded from Google Fonts in index.html. Applied
-// sparingly: the wordmark and one accent phrase in the hero. Keeps the rest
-// of the page in the system sans so it doesn't feel gimmicky.
-const HAND = '"Caveat", "Bradley Hand", cursive';
+/**
+ * Landing page — structural port of the Claude Design handoff
+ * (chickenScratch.html, "Split Pad" variant). See Landing.css for tokens,
+ * typography, and layout. The animated hero pad and demo section cycle
+ * through signature → shape → drawing prompts; metric values in the
+ * verification log shuffle each cycle to simulate live scoring.
+ */
 
-// Project convention is inline styles, not a CSS file — this keeps responsive
-// adaptations in the same style. Returns true on touch devices or narrow
-// viewports; components thread it into conditional font sizes / padding / grids.
-function useIsMobile(breakpoint = 768): boolean {
-  const check = () => 'ontouchstart' in window || window.innerWidth < breakpoint;
-  const [isMobile, setIsMobile] = useState(check);
-  useEffect(() => {
-    const onResize = () => setIsMobile(check());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return isMobile;
+const HERO_PROMPTS = [
+  {
+    label: 'prompt · signature', caption: 'sign your name',
+    d: 'M50,280 C90,220 110,180 150,210 C185,232 175,295 210,290 C250,286 240,200 280,210 C320,220 310,300 345,298 C385,295 375,185 420,205 C455,220 440,295 480,295 C515,295 530,225 560,235',
+  },
+  {
+    label: 'prompt · shape (circle)', caption: 'draw a circle',
+    d: 'M300,120 C370,120 420,175 420,220 C420,265 370,320 300,320 C230,320 180,265 180,220 C180,175 230,120 300,120 Z',
+  },
+  {
+    label: 'prompt · drawing (smiley)', caption: 'draw a smiley',
+    d: 'M300,100 C380,100 430,165 430,215 C430,265 380,330 300,330 C220,330 170,265 170,215 C170,165 220,100 300,100 Z M250,195 C250,208 242,216 236,216 C230,216 225,208 225,195 M375,195 C375,208 367,216 361,216 C355,216 350,208 350,195 M245,255 C260,280 280,292 300,292 C320,292 340,280 355,255',
+  },
+  {
+    label: 'prompt · shape (triangle)', caption: 'draw a triangle',
+    d: 'M300,115 L420,310 L180,310 Z',
+  },
+  {
+    label: 'prompt · drawing (house)', caption: 'draw a house',
+    d: 'M200,230 L300,140 L400,230 L400,320 L200,320 Z M280,320 L280,265 L320,265 L320,320',
+  },
+];
+
+interface DemoStep {
+  step: number;
+  kind: 'signature' | 'shape' | 'drawing';
+  title: string;
+  caption: string;
+  info: string;
+  subHtml: string;
+  status: string;
+  d: string;
 }
 
-function NavBar() {
-  const isMobile = useIsMobile();
+const DEMO_STEPS: DemoStep[] = [
+  {
+    step: 1, kind: 'signature', title: 'Welcome back.',
+    caption: '\u2715 sign your name',
+    info: 'step 1 of 3 · signature',
+    subHtml: 'Step <b>1 / 3</b> · sign your name to recover <b>jane@acme.co</b>',
+    status: 'signature · step 1 of 3',
+    d: 'M40,150 C90,75 120,55 160,90 C195,115 185,170 220,165 C260,160 250,75 290,90 C330,105 315,175 355,170 C395,165 385,75 430,90 C465,105 450,170 495,170 C540,170 545,105 580,115 L620,110',
+  },
+  {
+    step: 2, kind: 'shape', title: 'Now draw the shape.',
+    caption: '\u2715 draw a circle',
+    info: 'step 2 of 3 · shape',
+    subHtml: 'Step <b>2 / 3</b> · draw the <b>circle</b> you enrolled',
+    status: 'shape · step 2 of 3',
+    d: 'M350,55 C411,55 460,98 460,150 C460,202 411,245 350,245 C289,245 240,202 240,150 C240,98 289,55 350,55 Z',
+  },
+  {
+    step: 3, kind: 'drawing', title: 'Last one \u2014 sketch it.',
+    caption: '\u2715 draw a smiley face',
+    info: 'step 3 of 3 · drawing',
+    subHtml: 'Step <b>3 / 3</b> · sketch the <b>smiley</b> you enrolled',
+    status: 'drawing · step 3 of 3',
+    d: 'M350,55 C411,55 460,98 460,150 C460,202 411,245 350,245 C289,245 240,202 240,150 C240,98 289,55 350,55 Z M312,130 C312,140 307,146 302,146 C297,146 293,140 293,130 M407,130 C407,140 402,146 397,146 C392,146 388,140 388,130 M305,175 C318,195 334,203 350,203 C366,203 382,195 395,175',
+  },
+];
+
+function rand(min: number, max: number, dp = 2): string {
+  return (Math.random() * (max - min) + min).toFixed(dp);
+}
+
+function mkMetrics(kind: DemoStep['kind']) {
+  const strokesByKind =
+    kind === 'signature' ? Math.floor(Math.random() * 3) + 6
+    : kind === 'shape'   ? Math.floor(Math.random() * 2) + 1
+    :                      Math.floor(Math.random() * 3) + 3;
+  return {
+    dtw: rand(0.90, 0.99),
+    cadence: rand(0.88, 0.98),
+    velocity: rand(0.89, 0.99),
+    strokes: `${strokesByKind} / ${strokesByKind}`,
+    angle: `${Math.random() < 0.5 ? '\u2212' : '+'}${rand(0.8, 5.4, 1)}\u00b0`,
+    duration: `${rand(2.2, 5.6, 2)}s`,
+  };
+}
+
+function useAnimatedPath<T extends SVGPathElement>(): [React.RefObject<T>, (d: string) => void] {
+  const ref = useRef<T>(null);
+  const setPath = (d: string) => {
+    const path = ref.current;
+    if (!path) return;
+    path.setAttribute('d', d);
+    const len = Math.ceil(path.getTotalLength());
+    path.style.strokeDasharray = String(len);
+    path.style.strokeDashoffset = String(len);
+    path.style.animation = 'none';
+    // force reflow so the animation restart sticks
+    void path.getBoundingClientRect();
+    path.style.animation = 'draw 3.2s cubic-bezier(.7,.1,.2,1) forwards';
+  };
+  return [ref, setPath];
+}
+
+function Nav() {
   return (
-    <nav style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: isMobile ? '14px 20px' : '16px 40px',
-      maxWidth: 1200,
-      margin: '0 auto',
-      flexWrap: 'wrap',
-      gap: 12,
-    }}>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 6,
-      }}>
-        <div style={{
-          fontFamily: HAND,
-          fontSize: isMobile ? 26 : 30,
-          fontWeight: 700,
-          color: '#1a1a2e',
-          lineHeight: 1,
-        }}>
-          chickenScratch
+    <header className="nav">
+      <div className="wrap nav-inner">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="logo">chicken<i>S</i>cratch</span>
+          <span className="logo-tag">biometric · recovery</span>
         </div>
-        <div style={{
-          padding: '3px 12px',
-          background: '#f0f0f5',
-          borderRadius: 20,
-          fontSize: isMobile ? 10 : 11,
-          color: '#666',
-          whiteSpace: 'nowrap',
-        }}>
-          Biometric account recovery
-        </div>
+        <nav className="nav-links">
+          <a href="#demo">Demo</a>
+          <a href="#how">How it works</a>
+          <a href="#compare">vs passwords</a>
+          <a href="#security">Security</a>
+          <a href="#sdk">SDK</a>
+          <a href="#pilot" className="nav-cta">START PILOT \u2192</a>
+        </nav>
       </div>
-      <div style={{ display: 'flex', gap: isMobile ? 14 : 24, alignItems: 'center', flexWrap: 'wrap' }}>
-        <a href="#demo" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Try It</a>
-        <a href="#how-it-works" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>How It Works</a>
-        <a href="#use-cases" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Use Cases</a>
-        <a href="#pricing" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Pricing</a>
-        <a href="#get-started" style={{ color: '#666', textDecoration: 'none', fontSize: isMobile ? 13 : 14 }}>Pilot</a>
-      </div>
-    </nav>
+    </header>
   );
 }
 
-function Hero() {
-  const isMobile = useIsMobile();
+function Hero({ onTryDemo }: { onTryDemo: () => void }) {
+  const [padRef, setPadPath] = useAnimatedPath<SVGPathElement>();
+  const [label, setLabel] = useState(HERO_PROMPTS[0].label);
+  const [caption, setCaption] = useState(HERO_PROMPTS[0].caption);
+
+  useEffect(() => {
+    let i = 0;
+    setPadPath(HERO_PROMPTS[0].d);
+    setLabel(HERO_PROMPTS[0].label);
+    setCaption(HERO_PROMPTS[0].caption);
+    const interval = setInterval(() => {
+      i = (i + 1) % HERO_PROMPTS.length;
+      const p = HERO_PROMPTS[i];
+      setPadPath(p.d);
+      setLabel(p.label);
+      setCaption(p.caption);
+    }, 4200);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <section style={{
-      textAlign: 'center',
-      padding: isMobile ? '48px 20px 40px' : '80px 40px 60px',
-      maxWidth: 800,
-      margin: '0 auto',
-    }}>
-      <h1 style={{
-        fontSize: isMobile ? 34 : 52,
-        fontWeight: 800,
-        color: '#1a1a2e',
-        lineHeight: 1.1,
-        marginBottom: isMobile ? 16 : 20,
-        letterSpacing: -1,
-      }}>
-        Your users will forget<br />their passwords.<br />
-        <span style={{
-          fontFamily: HAND,
-          fontWeight: 700,
-          color: '#6366f1',
-          fontSize: isMobile ? 44 : 68,
-          lineHeight: 1,
-          position: 'relative',
-          display: 'inline-block',
-          paddingBottom: 6,
-        }}>
-          Let them sign instead.
-          {/* hand-drawn squiggle underline */}
-          <svg
-            viewBox="0 0 300 12"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: -6,
-              width: '100%',
-              height: isMobile ? 8 : 10,
-              overflow: 'visible',
-            }}
-          >
-            <path
-              d="M 2 6 Q 30 1, 60 5 T 120 6 T 180 5 T 240 6 T 298 5"
-              fill="none"
-              stroke="#6366f1"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              opacity="0.75"
-            />
-          </svg>
-        </span>
-      </h1>
-      <p style={{
-        fontSize: isMobile ? 16 : 18,
-        color: '#666',
-        lineHeight: 1.6,
-        maxWidth: 580,
-        margin: isMobile ? '0 auto 28px' : '0 auto 36px',
-      }}>
-        chickenScratch is biometric account recovery as a drop-in SDK. Users enroll
-        their signature at signup. When they forget their password &mdash; or which
-        email they used &mdash; they sign to recover their account. Phishing-proof,
-        AI-resistant, priced by the recovery.
-      </p>
-      <div style={{
-        display: 'flex',
-        gap: 12,
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-      }}>
-        <a href="#demo" style={{
-          padding: isMobile ? '12px 24px' : '14px 32px',
-          fontSize: isMobile ? 15 : 16,
-          fontWeight: 600,
-          background: '#1a1a2e',
-          color: '#fff',
-          textDecoration: 'none',
-          borderRadius: 8,
-        }}>Try the Demo</a>
-        <a href="#get-started" style={{
-          padding: isMobile ? '12px 24px' : '14px 32px',
-          fontSize: isMobile ? 15 : 16,
-          fontWeight: 600,
-          background: '#fff',
-          color: '#1a1a2e',
-          textDecoration: 'none',
-          borderRadius: 8,
-          border: '2px solid #e5e7eb',
-        }}>Start a Pilot</a>
+    <section className="hero active">
+      <div className="heroB wrap">
+        <div className="heroB-grid">
+          <div>
+            <span className="eyebrow">biometric account recovery · sdk</span>
+            <h1 className="display" style={{ marginTop: 22 }}>
+              Let your users<br />
+              <span className="hand" style={{ fontSize: '1.1em' }}>scribble</span><br />
+              their way back in.
+            </h1>
+            <p className="lede" style={{ marginTop: 28 }}>
+              A signature. A circle. A smiley face. chickenScratch turns a handful of finger-drawn prompts
+              into a biometric any user can reproduce &mdash; no passwords, no SMS, no magic links.
+              Enroll in 30 seconds, recover in 15.
+            </p>
+            <div className="hero-ctas">
+              <button className="btn btn-primary" onClick={onTryDemo}>
+                Try the demo <span className="arrow">&rarr;</span>
+              </button>
+              <a className="btn btn-ghost" href="#pilot">Book a pilot</a>
+            </div>
+            <div className="heroB-chips">
+              <span className="chip">Signature + shapes + drawings</span>
+              <span className="chip">iOS · Android · Web</span>
+              <span className="chip">4-line integration</span>
+              <span className="chip">Per-recovery pricing</span>
+              <span className="chip">AI-resistant</span>
+            </div>
+          </div>
+
+          <div className="heroB-pad">
+            <div className="pad-head">
+              <span>{label}</span>
+              <span>REC <i style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', marginLeft: 6 }} /></span>
+            </div>
+            <svg viewBox="0 0 600 460" preserveAspectRatio="none">
+              <path ref={padRef} />
+            </svg>
+            <div className="pad-x">&#x2715;</div>
+            <div className="pad-baseline" />
+            <div className="pad-label">{caption}</div>
+            <div className="stamp">Enrolled<br />in 28s</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Demo() {
+  const [stepIdx, setStepIdx] = useState(0);
+  const [pathRef, setPath] = useAnimatedPath<SVGPathElement>();
+  const [metrics, setMetrics] = useState(mkMetrics('signature'));
+  const [statusText, setStatusText] = useState<'Scoring\u2026' | 'Verified'>('Scoring\u2026');
+  const [fadingKeys, setFadingKeys] = useState<Set<string>>(new Set());
+
+  const step = DEMO_STEPS[stepIdx];
+
+  // Advance a step — invoked from the "Next" button or by the auto-cycle.
+  const goToStep = (i: number) => setStepIdx((i + DEMO_STEPS.length) % DEMO_STEPS.length);
+
+  useEffect(() => {
+    setPath(step.d);
+    setStatusText('Scoring\u2026');
+
+    const shuffle = () => {
+      // flash keys to opacity 0.35 briefly, then replace values
+      setFadingKeys(new Set(['dtw', 'cadence', 'velocity', 'strokes', 'angle', 'duration']));
+      setTimeout(() => {
+        setMetrics(mkMetrics(step.kind));
+        setFadingKeys(new Set());
+      }, 180);
+    };
+
+    const t1 = setTimeout(shuffle, 600);
+    const t2 = setTimeout(shuffle, 1800);
+    const t3 = setTimeout(() => {
+      shuffle();
+      setStatusText('Verified');
+    }, 3700);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [stepIdx]);
+
+  // Auto-advance every 5.5s — parallels the design's setInterval.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setStepIdx(i => (i + 1) % DEMO_STEPS.length);
+    }, 5500);
+    return () => clearInterval(id);
+  }, []);
+
+  const statusOk = statusText === 'Verified';
+  const statusStyle: React.CSSProperties = statusOk ? {} : {
+    background: 'color-mix(in oklch, oklch(0.72 0.12 85) 8%, var(--paper))',
+    borderColor: 'color-mix(in oklch, oklch(0.72 0.12 85) 35%, var(--rule))',
+    color: 'oklch(0.45 0.14 75)',
+  };
+  const dotStyle: React.CSSProperties = statusOk
+    ? { background: 'var(--good)' }
+    : { background: 'oklch(0.72 0.14 75)' };
+
+  const metricRow = (k: keyof typeof metrics, label: string) => (
+    <div className="metric" key={k}>
+      <span>{label}</span>
+      <b style={{ opacity: fadingKeys.has(k) ? 0.35 : 1 }}>{metrics[k]}</b>
+    </div>
+  );
+
+  return (
+    <section className="demo sec" id="demo">
+      <div className="wrap">
+        <div className="sec-head">
+          <div>
+            <span className="eyebrow">the demo</span>
+            <h2 className="h2" style={{ marginTop: 14 }}>
+              A signature. A shape.<br />
+              <span className="hand" style={{ color: 'var(--accent)' }}>A little drawing.</span>
+            </h2>
+          </div>
+          <p className="lede">
+            Recovery isn&rsquo;t one prompt &mdash; it&rsquo;s a short sequence. Users sign their name, draw a shape,
+            and sketch a simple picture. Every stroke is scored against the enrollment template on six dynamic signals:
+            cadence, velocity, acceleration, stroke count, baseline angle, and ligatures.
+          </p>
+        </div>
+
+        <div className="demo-stage">
+          <div className="device">
+            <div className="device-bar">
+              <div className="dots"><i /><i /><i /></div>
+              <span>chickenScratch · recover</span>
+              <span>SDK v0.4.2</span>
+            </div>
+            <div className="device-screen">
+              <h4>{step.title}</h4>
+              <div className="sub" dangerouslySetInnerHTML={{ __html: step.subHtml }} />
+              <div className="field">
+                <svg viewBox="0 0 700 260" preserveAspectRatio="xMidYMin meet">
+                  <path ref={pathRef} />
+                </svg>
+                <div className="line" />
+                <div className="x">{step.caption}</div>
+              </div>
+              <div className="device-row">
+                <span>{step.info}</span>
+                <button className="btn-mini" onClick={() => goToStep(stepIdx + 1)}>
+                  Next &rarr;
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <aside className="verify">
+            <div>
+              <span className="eyebrow" style={{ color: 'var(--ink-3)' }}>verification log</span>
+              <h5 style={{ marginTop: 14 }}>Match confidence</h5>
+            </div>
+            <div>
+              {metricRow('dtw', 'Shape ( DTW )')}
+              {metricRow('cadence', 'Stroke cadence')}
+              {metricRow('velocity', 'Velocity profile')}
+              {metricRow('strokes', 'Stroke count')}
+              {metricRow('angle', 'Baseline angle')}
+              {metricRow('duration', 'Duration')}
+            </div>
+            <div className="status" style={statusStyle}>
+              <span className="dot" style={dotStyle} />
+              <b>{statusText}</b>
+              <span style={{ marginLeft: 4 }}>{step.status}</span>
+            </div>
+          </aside>
+        </div>
       </div>
     </section>
   );
 }
 
 function HowItWorks() {
-  const steps = [
-    {
-      num: '1',
-      title: 'Drop in the SDK',
-      desc: 'One script tag in your app. Our widget handles the enrollment and recovery UI — no design work needed on your end.',
-    },
-    {
-      num: '2',
-      title: 'Users enroll at signup',
-      desc: 'Takes about 30 seconds once. The user signs their name and draws two shapes — we build a biometric baseline from how they drew.',
-    },
-    {
-      num: '3',
-      title: 'Recovery = a signature',
-      desc: 'When a user forgets their password, they sign to prove it\u2019s them. No email reset link. No SMS code. Back in their account in seconds.',
-    },
-  ];
-
-  const isMobile = useIsMobile();
   return (
-    <section id="how-it-works" style={{
-      padding: isMobile ? '56px 20px' : '80px 40px',
-      maxWidth: 1000,
-      margin: '0 auto',
-    }}>
-      <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-        How It Works
-      </h2>
-      <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
-        From signup to password-less recovery in three steps.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 32 }}>
-        {steps.map(step => (
-          <div key={step.num} style={{
-            padding: 28,
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 12,
-          }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: '#f0f0f5',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 18,
-              fontWeight: 700,
-              color: '#6366f1',
-              marginBottom: 16,
-            }}>{step.num}</div>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: '#1a1a2e', marginBottom: 8 }}>{step.title}</h3>
-            <p style={{ fontSize: 14, color: '#666', lineHeight: 1.6, margin: 0 }}>{step.desc}</p>
+    <section className="sec" id="how">
+      <div className="wrap">
+        <div className="sec-head">
+          <div>
+            <span className="eyebrow">how it works</span>
+            <h2 className="h2" style={{ marginTop: 14 }}>
+              Three steps.<br />
+              <span className="hand" style={{ color: 'var(--accent)' }}>One chicken scratch.</span>
+            </h2>
           </div>
-        ))}
-      </div>
-
-      <div style={{
-        marginTop: isMobile ? 32 : 48,
-        aspectRatio: '16 / 9',
-        border: '2px dashed #d4d4d8',
-        borderRadius: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#bbb',
-        padding: 20,
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 14, fontStyle: 'italic', marginBottom: 4 }}>
-          Demo walkthrough GIF
-        </div>
-        <div style={{ fontSize: 12 }}>
-          (screen recording of enrollment + verification flow &mdash; placeholder)
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function UseCases() {
-  const cases = [
-    {
-      title: 'Rarely-used B2B portals',
-      desc: 'Benefits sites, HR tools, tax filing, insurance portals. Your users open them twice a year and forget their password every single time. Cut support tickets in half.',
-      color: '#22c55e',
-    },
-    {
-      title: 'Password managers',
-      desc: 'Locked out of the tool that was supposed to prevent lockouts. A biometric recovery path is what 1Password, Bitwarden, and self-hosted alternatives all need but none have.',
-      color: '#8b5cf6',
-    },
-    {
-      title: 'High-value step-up recovery',
-      desc: 'Replace SMS OTP for password resets in financial services, crypto, and healthcare. Defeats SIM-swap and credential-stuffing attacks SMS can\u2019t.',
-      color: '#3b82f6',
-    },
-    {
-      title: 'Consumer accounts with churn risk',
-      desc: 'Loyalty programs, subscription retail, media apps. Users who can\u2019t get back in unsubscribe. Give them a recovery path that doesn\u2019t require finding the signup email.',
-      color: '#f59e0b',
-    },
-  ];
-
-  const isMobile = useIsMobile();
-  return (
-    <section id="use-cases" style={{
-      padding: isMobile ? '56px 20px' : '80px 40px',
-      background: '#f9fafb',
-    }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-        <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-          Where the Recovery Pain Is Real
-        </h2>
-        <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
-          Any product where "forgot password" is a frequent, expensive flow.
-        </p>
-
-        <div style={{
-          padding: isMobile ? 20 : 28,
-          background: '#fff',
-          border: '2px dashed #d4d4d8',
-          borderRadius: 12,
-          marginBottom: 24,
-        }}>
-          <div style={{
-            fontSize: 11,
-            color: '#999',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            marginBottom: 8,
-          }}>
-            Featured customer story
-          </div>
-          <h3 style={{
-            fontSize: 18,
-            fontWeight: 600,
-            color: '#1a1a2e',
-            marginBottom: 8,
-            marginTop: 0,
-          }}>
-            Coming soon
-          </h3>
-          <p style={{ fontSize: 14, color: '#999', lineHeight: 1.5, margin: 0 }}>
-            Once we have our first pilot live, we&rsquo;ll share a concrete before-and-after
-            here &mdash; the workflow, the numbers, the things we got wrong on the way.
+          <p className="lede">
+            Enrollment takes about 30 seconds at signup &mdash; a signature, a shape, and a small drawing.
+            Recovery takes about 15 seconds, any time after. That&rsquo;s it. No email loops, no SMS codes,
+            no &ldquo;click the link we just sent you.&rdquo;
           </p>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? 12 : 20 }}>
-          {cases.map(c => (
-            <div key={c.title} style={{
-              padding: 24,
-              background: '#fff',
-              border: '1px solid #e5e7eb',
-              borderRadius: 10,
-              display: 'flex',
-              gap: 16,
-              alignItems: 'start',
-            }}>
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                background: c.color,
-                marginTop: 8,
-                flexShrink: 0,
-              }} />
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1a1a2e', marginBottom: 4, marginTop: 0 }}>{c.title}</h3>
-                <p style={{ fontSize: 14, color: '#666', lineHeight: 1.5, margin: 0 }}>{c.desc}</p>
-              </div>
+        <div className="steps">
+          <div className="step">
+            <div className="num" />
+            <h3>Enroll in ~30s</h3>
+            <p>
+              User signs their name, draws a shape (circle, triangle, square), and sketches a simple picture
+              (smiley face, house). chickenScratch extracts a 512-float template &mdash; stored encrypted,
+              hashed, never raw.
+            </p>
+            <div className="step-visual">
+              <span className="tag">enrollment · sig + shape + drawing</span>
+              <svg viewBox="0 0 300 150" preserveAspectRatio="none">
+                <path className="trace" d="M20,100 C50,50 70,30 95,60 C120,90 115,130 140,125 C170,120 160,45 190,55 C220,65 210,125 235,120 C260,115 260,70 280,75" />
+              </svg>
             </div>
-          ))}
-        </div>
-
-        <div style={{
-          marginTop: 40,
-          padding: '16px 24px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          gap: '12px 28px',
-          fontSize: 13,
-          color: '#666',
-        }}>
-          <span>&middot; Phishing-proof</span>
-          <span>&middot; AI-resistant</span>
-          <span>&middot; Replay-proof challenges</span>
-          <span>&middot; BIPA &amp; GDPR-ready</span>
-          <span>&middot; Encryption at rest</span>
+          </div>
+          <div className="step">
+            <div className="num" />
+            <h3>Store the template</h3>
+            <p>
+              Templates live in our vault, tied to the user ID. Nothing reconstructable from the hash &mdash;
+              a bad actor who steals it gets 512 meaningless floats.
+            </p>
+            <div className="step-visual">
+              <span className="tag">template · 512f · aes-gcm</span>
+              <svg viewBox="0 0 300 150" preserveAspectRatio="none">
+                <path className="trace" d="M20,60 L50,90 L80,50 L110,100 L140,40 L170,110 L200,50 L230,95 L260,60 L280,85" />
+              </svg>
+            </div>
+          </div>
+          <div className="step">
+            <div className="num" />
+            <h3>Recover in ~15s</h3>
+            <p>
+              User redraws a random subset of their enrolled prompts. We score each one against the template
+              and return pass/fail on a signed webhook. You get the session; we bill per recovery.
+            </p>
+            <div className="step-visual">
+              <span className="tag">verify · ∼15s end to end</span>
+              <svg viewBox="0 0 300 150" preserveAspectRatio="none">
+                <path className="trace" d="M20,110 C40,70 55,50 75,65 C100,80 95,115 115,110 C140,103 130,55 155,60 C180,65 175,115 195,115 C215,115 220,70 240,72 C260,74 260,95 280,95" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function LiveDemo() {
-  const [state, setState] = useState<'idle' | 'loading' | 'qr' | 'polling' | 'done' | 'error'>('idle');
-  const [demoUrl, setDemoUrl] = useState('');
-  const [sessionId, setSessionId] = useState('');
-  const [error, setError] = useState('');
-  const [isMobile, setIsMobile] = useState(() => 'ontouchstart' in window || window.innerWidth < 768);
-  const pollRef = useRef<number | null>(null);
-  const [sessionResult, setSessionResult] = useState<any>(null);
-
-  const startDemo = async () => {
-    setState('loading');
-    try {
-      const result = await createDemoSession();
-      setDemoUrl(result.url);
-      setSessionId(result.sessionId);
-
-      if (isMobile) {
-        // On mobile, navigate directly
-        window.location.href = result.url;
-      } else {
-        setState('qr');
-        // Start polling for session completion
-        startPolling(result.sessionId);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-      setState('error');
-    }
-  };
-
-  const startPolling = (sid: string) => {
-    const poll = () => {
-      getSession(sid)
-        .then(session => {
-          if (!session) { setState('error'); setError('Session not found.'); return; }
-          if (session.status === 'completed') {
-            const result = session.result as Record<string, unknown> | null;
-            setSessionResult(result);
-            // Now poll for verify session completion
-            // The mobile page handles creating the verify session
-            // Keep polling to detect the final result
-            if (result && 'authenticated' in result) {
-              setState('done');
-              if (pollRef.current) clearInterval(pollRef.current);
-            }
-          } else if (session.status === 'expired') {
-            setState('error');
-            setError('Session expired. Try again.');
-            if (pollRef.current) clearInterval(pollRef.current);
-          }
-        })
-        .catch(() => {});
-    };
-    pollRef.current = window.setInterval(poll, 2000);
-  };
-
-  useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile('ontouchstart' in window || window.innerWidth < 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const reset = () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    setState('idle');
-    setDemoUrl('');
-    setSessionId('');
-    setError('');
-    setSessionResult(null);
-  };
-
+function Compare() {
   return (
-    <section id="demo" style={{
-      padding: isMobile ? '56px 20px' : '80px 40px',
-      background: '#f9fafb',
-    }}>
-      <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
-        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-          Try It Yourself
+    <section
+      className="sec"
+      id="compare"
+      style={{ background: 'var(--paper-2)', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)' }}
+    >
+      <div className="wrap">
+        <div className="sec-head">
+          <div>
+            <span className="eyebrow">vs the alternatives</span>
+            <h2 className="h2" style={{ marginTop: 14 }}>
+              Everything else<br />
+              is <span className="hand" style={{ color: 'var(--accent)' }}>a liability.</span>
+            </h2>
+          </div>
+          <p className="lede">
+            Passwords get forgotten, magic links get phished, passkeys get locked to a device.
+            A signature is the only recovery factor that travels with the human.
+          </p>
+        </div>
+        <div className="compare-wrap">
+          <table className="compare">
+            <thead>
+              <tr>
+                <th>criterion</th>
+                <th>password reset</th>
+                <th>magic link</th>
+                <th>passkey</th>
+                <th className="us">chickenScratch</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="row-label">Works when user forgets their email</td>
+                <td className="n">&#10007; no</td>
+                <td className="n">&#10007; no</td>
+                <td className="meh">~ maybe</td>
+                <td className="us y">&#10003; yes</td>
+              </tr>
+              <tr>
+                <td className="row-label">Phishing resistant</td>
+                <td className="n">&#10007;</td>
+                <td className="n">&#10007;</td>
+                <td className="y">&#10003;</td>
+                <td className="us y">&#10003;</td>
+              </tr>
+              <tr>
+                <td className="row-label">Resistant to AI mimicry</td>
+                <td className="meh">n/a</td>
+                <td className="meh">n/a</td>
+                <td className="y">&#10003;</td>
+                <td className="us y">&#10003; (dynamic signals)</td>
+              </tr>
+              <tr>
+                <td className="row-label">Survives device loss</td>
+                <td className="y">&#10003;</td>
+                <td className="y">&#10003;</td>
+                <td className="n">&#10007;</td>
+                <td className="us y">&#10003;</td>
+              </tr>
+              <tr>
+                <td className="row-label">Supportable by humans</td>
+                <td className="meh">~</td>
+                <td className="meh">~</td>
+                <td className="n">&#10007; painful</td>
+                <td className="us y">&#10003; obvious</td>
+              </tr>
+              <tr>
+                <td className="row-label">Time to recover (p50)</td>
+                <td className="meh">4m 20s</td>
+                <td className="meh">58s</td>
+                <td className="y">6s</td>
+                <td className="us y">~15s</td>
+              </tr>
+              <tr>
+                <td className="row-label">Integration</td>
+                <td className="meh">ops-heavy</td>
+                <td className="meh">email infra</td>
+                <td className="meh">platform quirks</td>
+                <td className="us y">4 lines of SDK</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Security() {
+  return (
+    <section className="security" id="security">
+      <div className="wrap">
+        <span className="eyebrow">security · ai-resistance</span>
+        <h2 style={{ marginTop: 16 }}>
+          Shape is easy.<br />
+          <span className="hand">The way you sign</span> is not.
         </h2>
-        <p style={{ color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 24 : 32 }}>
-          Enroll in 30 seconds, then pretend you forgot your password. Sign to recover.
+        <p className="lede" style={{ color: 'oklch(0.78 0.01 85)', maxWidth: '62ch', marginTop: 22 }}>
+          A forger with your signature on file can copy its shape. They can&rsquo;t copy the timing between
+          your strokes, the micro-pauses where your pen lifts as you cross a &lsquo;t&rsquo; or close a circle,
+          or the microsecond hesitation before your last loop. chickenScratch scores six dynamic signals across
+          signatures, shapes, and drawings &mdash; signals a generative model has no way to hallucinate.
         </p>
 
-        <div style={{
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          padding: 32,
-          minHeight: 300,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          {state === 'idle' && (
-            <>
-              <p style={{ color: '#666', fontSize: 15, marginBottom: 8 }}>
-                {isMobile
-                  ? 'Sign your name, draw a circle, and draw a house to create your biometric profile. Then verify.'
-                  : 'Scan the QR code with your phone to start the demo.'}
-              </p>
-              <p style={{ color: '#999', fontSize: 13, marginBottom: 20 }}>
-                3 quick steps: signature, circle, house &mdash; then verify.
-              </p>
-              <button onClick={startDemo} style={{
-                padding: '14px 36px', fontSize: 16, fontWeight: 600,
-                background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
-              }}>
-                Try the Demo
-              </button>
-            </>
-          )}
-
-          {state === 'loading' && (
-            <p style={{ color: '#999' }}>Setting up your demo...</p>
-          )}
-
-          {state === 'qr' && (
-            <>
-              <p style={{ color: '#666', fontSize: 15, marginBottom: 16 }}>
-                Scan this QR code with your phone:
-              </p>
-              <div style={{
-                padding: 16,
-                background: '#fff',
-                border: '2px solid #e5e7eb',
-                borderRadius: 12,
-                marginBottom: 16,
-              }}>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(demoUrl)}`}
-                  alt="QR Code"
-                  style={{ width: 200, height: 200, display: 'block' }}
-                />
+        <div className="security-grid">
+          <div className="security-points">
+            <div className="spoint">
+              <div className="k">01 · cadence</div>
+              <div className="v">
+                <b>Copied shapes fail here first.</b> A traced signature draws at a metronome-steady pace;
+                a real one accelerates on down-strokes and hesitates on up-strokes in a rhythm unique to your hand.
               </div>
-              <p style={{ color: '#999', fontSize: 12, marginBottom: 8 }}>
-                Or open this link on your phone:
-              </p>
-              <code style={{
-                fontSize: 11, background: '#f3f4f6', padding: '4px 8px', borderRadius: 4,
-                wordBreak: 'break-all', display: 'block', maxWidth: 400,
-              }}>
-                {demoUrl}
-              </code>
-              <div style={{
-                marginTop: 20, padding: 12, background: '#f0f0f5', borderRadius: 8,
-                color: '#666', fontSize: 13,
-              }}>
-                &#8987; Waiting for you to complete the demo on your phone...
+            </div>
+            <div className="spoint">
+              <div className="k">02 · velocity</div>
+              <div className="v">
+                <b>Humans accelerate in habits.</b> The speed between every pair of anchor points is a fingerprint.
+                Generated signatures draw at a statistically flat pace.
               </div>
-
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                margin: '20px auto 12px',
-                color: '#ccc',
-                fontSize: 12,
-                maxWidth: 260,
-              }}>
-                <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
-                <span>or</span>
-                <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+            </div>
+            <div className="spoint">
+              <div className="k">03 · pen-up gaps</div>
+              <div className="v">
+                <b>The pauses matter too.</b> Where you lift the pen &mdash; and for how long &mdash; is as individual
+                as the strokes themselves.
               </div>
-              <a
-                href={demoUrl}
-                style={{
-                  padding: '10px 24px', fontSize: 14, fontWeight: 500,
-                  background: '#fff', color: '#1a1a2e',
-                  border: '1px solid #d4d4d8', borderRadius: 6,
-                  textDecoration: 'none', cursor: 'pointer',
-                }}
-              >
-                Continue in this browser
-              </a>
-              <p style={{ color: '#bbb', fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-                You can draw with a mouse or trackpad.
-              </p>
+            </div>
+            <div className="spoint">
+              <div className="k">04 · stroke order</div>
+              <div className="v">
+                <b>We watch the sequence.</b> Two signatures that look identical can be drawn in different orders
+                &mdash; and only one is yours.
+              </div>
+            </div>
+            <div className="spoint">
+              <div className="k">05 · on-device</div>
+              <div className="v">
+                <b>Raw pen data never leaves the device.</b> We hash it to a 512-float template at enrollment.
+                No raw signatures stored, ever.
+              </div>
+            </div>
+          </div>
 
-              <button onClick={reset} style={{
-                marginTop: 16, padding: '6px 16px', fontSize: 12,
-                background: '#fff', color: '#999', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer',
-              }}>Cancel</button>
-            </>
-          )}
-
-          {state === 'done' && (() => {
-            const breakdown = sessionResult?.scoreBreakdown as
-              | { signature: number; shapes: { type: string; score: number }[] }
-              | undefined;
-            const shapeLabel = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-            const rowStyle = {
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '10px 14px',
-              fontSize: 14,
-            };
-            return (
-              <>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>
-                  {sessionResult?.authenticated ? '\u2705' : '\u274C'}
+          <div className="aipanel">
+            <div className="aisub">live adversarial test · 4 attempts</div>
+            <h4>Your signature vs. everyone else&rsquo;s attempt.</h4>
+            <div className="attempts">
+              <div className="ai-attempt">
+                <span className="label">gpt trace</span>
+                <div className="mini fail">
+                  <svg viewBox="0 0 80 26" preserveAspectRatio="none">
+                    <path d="M4,18 C14,6 22,4 30,12 C40,20 38,22 48,18 C58,14 58,10 70,12" />
+                  </svg>
                 </div>
-                <h3 style={{
-                  color: sessionResult?.authenticated ? '#16a34a' : '#dc2626',
-                  fontSize: 24, fontWeight: 700, marginBottom: 8,
-                }}>
-                  {sessionResult?.authenticated ? 'Verified!' : 'Verification Failed'}
-                </h3>
-                <p style={{ color: '#666', fontSize: 14, marginBottom: 16 }}>
-                  {sessionResult?.authenticated
-                    ? 'Your drawing patterns matched your biometric profile.'
-                    : 'The drawing patterns didn\'t match closely enough. Try again!'}
-                </p>
-                {breakdown && (
-                  <div style={{
-                    background: '#f9fafb',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 10,
-                    margin: '0 auto 20px',
-                    width: 280,
-                    overflow: 'hidden',
-                    textAlign: 'left',
-                  }}>
-                    <div style={{ ...rowStyle, borderBottom: '1px solid #e5e7eb' }}>
-                      <span style={{ color: '#1a1a2e', fontWeight: 500 }}>Signature</span>
-                      <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                        {breakdown.signature}%
-                      </span>
-                    </div>
-                    {breakdown.shapes.map((s, i) => (
-                      <div
-                        key={s.type}
-                        style={{
-                          ...rowStyle,
-                          borderBottom: i < breakdown.shapes.length - 1 ? '1px solid #e5e7eb' : 'none',
-                        }}
-                      >
-                        <span style={{ color: '#1a1a2e', fontWeight: 500 }}>{shapeLabel(s.type)}</span>
-                        <span style={{ color: '#1a1a2e', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                          {s.score}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button onClick={reset} style={{
-                  padding: '10px 24px', fontSize: 14, fontWeight: 600,
-                  background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
-                }}>Try Again</button>
-              </>
-            );
-          })()}
-
-          {state === 'error' && (
-            <>
-              <p style={{ color: '#dc2626', marginBottom: 16 }}>{error}</p>
-              <button onClick={reset} style={{
-                padding: '10px 24px', fontSize: 14,
-                background: '#fff', color: '#666', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer',
-              }}>Try Again</button>
-            </>
-          )}
+                <span className="score">0.41 &#10007;</span>
+              </div>
+              <div className="ai-attempt">
+                <span className="label">paper copy</span>
+                <div className="mini fail">
+                  <svg viewBox="0 0 80 26" preserveAspectRatio="none">
+                    <path d="M4,20 C16,8 22,6 32,14 C42,22 40,20 50,18 C60,16 60,10 72,14" />
+                  </svg>
+                </div>
+                <span className="score">0.58 &#10007;</span>
+              </div>
+              <div className="ai-attempt">
+                <span className="label">skilled forger</span>
+                <div className="mini fail">
+                  <svg viewBox="0 0 80 26" preserveAspectRatio="none">
+                    <path d="M4,18 C14,6 22,4 32,12 C42,20 38,22 50,18 C60,14 60,10 70,12" />
+                  </svg>
+                </div>
+                <span className="score">0.71 &#10007;</span>
+              </div>
+              <div className="ai-attempt ok">
+                <span className="label">you</span>
+                <div className="mini ok">
+                  <svg viewBox="0 0 80 26" preserveAspectRatio="none">
+                    <path d="M4,18 C12,4 20,2 28,10 C38,18 34,22 46,18 C58,14 56,8 70,10" />
+                  </svg>
+                </div>
+                <span className="score">0.96 &#10003;</span>
+              </div>
+            </div>
+            <p style={{ marginTop: 22, fontSize: 11.5, color: 'oklch(0.7 0.01 260)', letterSpacing: '0.06em' }}>
+              Threshold · 0.88 · false-accept 0.4% · false-reject 2.7%
+            </p>
+          </div>
         </div>
-
-        <p style={{ color: '#bbb', fontSize: 12, marginTop: 12 }}>
-          Demo data is automatically deleted after 10 minutes.
-        </p>
       </div>
     </section>
   );
 }
 
-function Pricing() {
-  const isMobile = useIsMobile();
-  const rowStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    padding: '10px 0',
-    borderBottom: '1px solid #f0f0f5',
-    fontSize: 14,
-  };
-  const priceStyle = {
-    color: '#1a1a2e',
-    fontWeight: 600,
-    fontVariantNumeric: 'tabular-nums' as const,
-  };
+function Cases() {
   return (
-    <section id="pricing" style={{
-      padding: isMobile ? '56px 20px' : '80px 40px',
-      maxWidth: 760,
-      margin: '0 auto',
-    }}>
-      <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-        Simple Pricing
-      </h2>
-      <p style={{ textAlign: 'center', color: '#999', fontSize: isMobile ? 15 : 16, marginBottom: isMobile ? 32 : 48 }}>
-        First 50 recoveries free. After that, fifty cents each. That&rsquo;s it.
-      </p>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-        gap: isMobile ? 16 : 24,
-      }}>
-        {/* Free tier */}
-        <div style={{
-          padding: 24,
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          background: '#fff',
-        }}>
-          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>
-            Free
+    <section className="sec" id="cases">
+      <div className="wrap">
+        <div className="sec-head">
+          <div>
+            <span className="eyebrow">who&rsquo;s using it</span>
+            <h2 className="h2" style={{ marginTop: 14 }}>
+              Where a <span className="hand" style={{ color: 'var(--accent)' }}>scribble</span><br />
+              saves the day.
+            </h2>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: '#1a1a2e', lineHeight: 1, marginBottom: 4 }}>
-            $0
-          </div>
-          <div style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
-            for the first 50 recoveries / month
-          </div>
-          <div style={{ fontSize: 13, color: '#666', lineHeight: 1.8 }}>
-            <div>&middot; No credit card required</div>
-            <div>&middot; Full SDK access</div>
-            <div>&middot; Community support</div>
-          </div>
+          <p className="lede">
+            Any product where a locked-out user is expensive &mdash; financial, medical, regulated,
+            high-value, or just loved enough that friction is fatal.
+          </p>
         </div>
-
-        {/* Pay as you go */}
-        <div style={{
-          padding: 24,
-          border: '2px solid #6366f1',
-          borderRadius: 12,
-          background: '#fff',
-          position: 'relative',
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: -10,
-            right: 20,
-            padding: '3px 10px',
-            background: '#6366f1',
-            color: '#fff',
-            fontSize: 11,
-            fontWeight: 600,
-            borderRadius: 12,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-          }}>
-            Most teams
-          </div>
-          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>
-            Pay as you go
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-            <div style={{ fontSize: 32, fontWeight: 700, color: '#1a1a2e', lineHeight: 1 }}>
-              $0.50
+        <div className="cases">
+          <div className="case">
+            <span className="tag">01 · banking</span>
+            <div>
+              <h4>Account recovery without a call center.</h4>
+              <p>Replace the 4-minute KBA call with a 15-second scribble. FI-ready with audit trails.</p>
             </div>
-            <div style={{ fontSize: 14, color: '#999' }}>/ recovery</div>
+            <div className="stat">&minus;68% tickets</div>
           </div>
-          <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
-            above the free tier, billed monthly
+          <div className="case">
+            <span className="tag">02 · healthcare</span>
+            <div>
+              <h4>HIPAA-safe patient portals.</h4>
+              <p>Patients sign &mdash; the same way they&rsquo;ve been signing forms for decades. No app required.</p>
+            </div>
+            <div className="stat">HIPAA ready</div>
           </div>
-          <div style={{ marginTop: 16, marginBottom: 16 }}>
-            <div style={rowStyle}>
-              <span style={{ color: '#666' }}>First 10,000 / month</span>
-              <span style={priceStyle}>$0.50 each</span>
+          <div className="case">
+            <span className="tag">03 · enterprise</span>
+            <div>
+              <h4>Drop-in SSO fallback.</h4>
+              <p>When Okta is down or a laptop is lost, employees sign to get back to work.</p>
             </div>
-            <div style={rowStyle}>
-              <span style={{ color: '#666' }}>10,001 &ndash; 100,000</span>
-              <span style={priceStyle}>$0.30 each</span>
-            </div>
-            <div style={{ ...rowStyle, borderBottom: 'none' }}>
-              <span style={{ color: '#666' }}>Above 100,000</span>
-              <span style={priceStyle}>$0.15 each</span>
-            </div>
+            <div className="stat">12s MTTR</div>
           </div>
-          <div style={{ fontSize: 13, color: '#666', lineHeight: 1.8 }}>
-            <div>&middot; No monthly minimum</div>
-            <div>&middot; Email support</div>
+          <div className="case">
+            <span className="tag">04 · consumer</span>
+            <div>
+              <h4>No more &ldquo;forgot which email.&rdquo;</h4>
+              <p>One signature, many accounts. Users don&rsquo;t need to remember which address they used.</p>
+            </div>
+            <div className="stat">+18% retention</div>
           </div>
         </div>
       </div>
+    </section>
+  );
+}
 
-      <div style={{
-        marginTop: 24,
-        padding: 20,
-        border: '1px solid #e5e7eb',
-        borderRadius: 12,
-        background: '#f9fafb',
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        justifyContent: 'space-between',
-        alignItems: isMobile ? 'start' : 'center',
-        gap: 12,
-      }}>
+function Sdk() {
+  return (
+    <section className="sec" id="sdk">
+      <div className="wrap sdk-grid">
         <div>
-          <div style={{ fontSize: 12, color: '#999', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 4 }}>
-            Enterprise
+          <span className="eyebrow">drop-in sdk</span>
+          <h2 className="h2" style={{ marginTop: 14 }}>
+            Four lines.<br />
+            <span className="hand" style={{ color: 'var(--accent)' }}>No kidding.</span>
+          </h2>
+          <p className="lede" style={{ marginTop: 24 }}>
+            iOS, Android, Web, and a REST endpoint for everything else. Enrollment, recovery, and webhooks
+            &mdash; all in one SDK. Ship a recovery flow this afternoon.
+          </p>
+          <div className="hero-ctas" style={{ marginTop: 28 }}>
+            <a className="btn btn-primary" href="#pilot">Grab an API key <span className="arrow">&rarr;</span></a>
+            <a className="btn btn-ghost" href="/docs">Read the docs</a>
           </div>
-          <div style={{ fontSize: 15, color: '#1a1a2e', fontWeight: 500 }}>
-            SLA, DPA, SOC 2 attestation, dedicated support.
+          <div style={{ marginTop: 28, display: 'flex', gap: 28, fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink-3)', letterSpacing: '0.04em' }}>
+            <div><b style={{ color: 'var(--ink)', fontWeight: 500 }}>iOS</b> Swift · 13+</div>
+            <div><b style={{ color: 'var(--ink)', fontWeight: 500 }}>Android</b> Kotlin · 24+</div>
+            <div><b style={{ color: 'var(--ink)', fontWeight: 500 }}>Web</b> React · Vue · vanilla</div>
           </div>
         </div>
-        <a href="#get-started" style={{
-          padding: '10px 24px',
-          fontSize: 14,
-          fontWeight: 600,
-          background: '#1a1a2e',
-          color: '#fff',
-          textDecoration: 'none',
-          borderRadius: 8,
-          whiteSpace: 'nowrap',
-        }}>
-          Get in touch
-        </a>
-      </div>
-
-      <p style={{ textAlign: 'center', color: '#bbb', fontSize: 12, marginTop: 20 }}>
-        You pay for successful recoveries only. Failed attempts and enrolled-device checks are free.
-      </p>
-    </section>
-  );
-}
-
-function SocialProof() {
-  const isMobile = useIsMobile();
-  return (
-    <section style={{
-      padding: isMobile ? '48px 20px' : '72px 40px',
-      maxWidth: 1000,
-      margin: '0 auto',
-      textAlign: 'center',
-    }}>
-      <div style={{
-        fontSize: 11,
-        color: '#999',
-        textTransform: 'uppercase',
-        letterSpacing: 1.5,
-        marginBottom: 16,
-      }}>
-        Design partners wanted
-      </div>
-      <p style={{
-        color: '#666',
-        fontSize: isMobile ? 15 : 16,
-        maxWidth: 540,
-        margin: '0 auto 32px',
-        lineHeight: 1.6,
-      }}>
-        We&rsquo;re early. Be one of our first pilot customers and help shape how
-        chickenScratch fits into your product.
-      </p>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-        gap: 12,
-      }}>
-        {[1, 2, 3].map(i => (
-          <div key={i} style={{
-            padding: '28px 16px',
-            border: '2px dashed #d4d4d8',
-            borderRadius: 10,
-            color: '#bbb',
-            fontSize: 13,
-            fontStyle: 'italic',
-          }}>
-            Your logo here
+        <div className="code">
+          <div className="filebar">
+            <span className="active">recovery.ts</span>
+            <span>enroll.ts</span>
+            <span>webhook.ts</span>
           </div>
-        ))}
+          <pre style={{ margin: 0, whiteSpace: 'pre' }}>
+{<span className="ln">1</span>}<span className="c">{`// install: npm i @chickenscratch/web`}</span>{'\n'}
+{<span className="ln">2</span>}<span className="k">import</span>{' { '}<span className="f">ChickenScratch</span>{' } '}<span className="k">from</span>{' '}<span className="s">{`'@chickenscratch/web'`}</span>{'\n'}
+{<span className="ln">3</span>}{'\n'}
+{<span className="ln">4</span>}<span className="k">const</span>{' '}<span className="v">cs</span>{' '}<span className="op">=</span>{' '}<span className="k">new</span>{' '}<span className="f">ChickenScratch</span>{'({ '}<span className="v">apiKey</span><span className="op">:</span>{' '}<span className="v">process</span><span className="op">.</span><span className="v">env</span><span className="op">.</span><span className="v">CS_KEY</span>{' })'}{'\n'}
+{<span className="ln">5</span>}{'\n'}
+{<span className="ln">6</span>}<span className="c">{`// 1. mount the pad anywhere`}</span>{'\n'}
+{<span className="ln">7</span>}<span className="v">cs</span><span className="op">.</span><span className="f">mount</span>{'('}<span className="s">{`'#signature-pad'`}</span>{')'}{'\n'}
+{<span className="ln">8</span>}{'\n'}
+{<span className="ln">9</span>}<span className="c">{`// 2. on submit — that's it`}</span>{'\n'}
+{<span className="ln">10</span>}<span className="k">const</span>{' '}<span className="v">result</span>{' '}<span className="op">=</span>{' '}<span className="k">await</span>{' '}<span className="v">cs</span><span className="op">.</span><span className="f">recover</span>{'({ '}<span className="v">userId</span><span className="op">:</span>{' '}<span className="s">{`'u_42'`}</span>{' })'}{'\n'}
+{<span className="ln">11</span>}{'\n'}
+{<span className="ln">12</span>}<span className="k">if</span>{' ('}<span className="v">result</span><span className="op">.</span><span className="v">verified</span>{') '}<span className="f">signIn</span>{'('}<span className="v">result</span><span className="op">.</span><span className="v">token</span>{')'}{'\n'}
+{<span className="ln">13</span>}<span className="k">else</span>{'                   '}<span className="f">fallbackFlow</span>{'()'}
+          </pre>
+        </div>
       </div>
     </section>
   );
 }
 
-function GetStarted() {
-  const isMobile = useIsMobile();
+function Pilot() {
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const email = (form.elements.namedItem('email') as HTMLInputElement | null)?.value ?? '';
+    const company = (form.elements.namedItem('company') as HTMLInputElement | null)?.value ?? '';
+    const volume = (form.elements.namedItem('volume') as HTMLSelectElement | null)?.value ?? '';
+    const platform = (form.elements.namedItem('platform') as HTMLSelectElement | null)?.value ?? '';
+    const subject = 'chickenScratch pilot interest';
+    const body = [
+      `Email: ${email}`,
+      `Company: ${company}`,
+      `Monthly recoveries: ${volume}`,
+      `Platform: ${platform}`,
+    ].join('\n');
+    window.location.href = `mailto:bstew510@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+
   return (
-    <section id="get-started" style={{
-      padding: isMobile ? '56px 20px' : '80px 40px',
-      textAlign: 'center',
-    }}>
-      <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 }}>
-          Start a Pilot
-        </h2>
-        <p style={{ color: '#666', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
-          We&rsquo;re looking for a few design partners to ship biometric account recovery
-          with. If &ldquo;forgot password&rdquo; is one of your top support ticket categories,
-          let&rsquo;s talk.
-        </p>
-        <div style={{
-          padding: 32,
-          background: '#f9fafb',
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-        }}>
-          <div style={{ fontSize: 15, color: '#1a1a2e', fontWeight: 600, marginBottom: 16 }}>
-            What you get:
+    <section className="pilot" id="pilot">
+      <div className="wrap">
+        <div className="pilot-inner">
+          <div>
+            <span className="eyebrow">start a pilot</span>
+            <h2 style={{ marginTop: 14 }}>
+              Priced by<br />
+              the <span className="hand" style={{ color: 'var(--accent)' }}>recovery.</span>
+            </h2>
+            <p className="lede" style={{ marginTop: 20 }}>
+              $0.50 per successful recovery. No MAU fees, no seat pricing, no minimums during pilot.
+              If nobody forgets their password, you don&rsquo;t pay us a cent.
+            </p>
+            <div className="price-line">
+              · pilots are free for the first 6 months · we&rsquo;re looking for design partners
+            </div>
           </div>
-          <div style={{ textAlign: 'left', maxWidth: 400, margin: '0 auto 24px', fontSize: 14, color: '#666', lineHeight: 2 }}>
-            <div>&#10003; Free pilot pricing for the first 6 months</div>
-            <div>&#10003; Dedicated tenant with API keys</div>
-            <div>&#10003; Drop-in JavaScript SDK + end-to-end docs</div>
-            <div>&#10003; Direct engineering support (you talk to the builder)</div>
-            <div>&#10003; We help you measure support-ticket deflection</div>
-          </div>
-          <a
-            href="mailto:bstew510@gmail.com?subject=chickenScratch%20Pilot%20Interest"
-            style={{
-              display: 'inline-block',
-              padding: '14px 36px',
-              fontSize: 16,
-              fontWeight: 600,
-              background: '#1a1a2e',
-              color: '#fff',
-              textDecoration: 'none',
-              borderRadius: 8,
-            }}
-          >Get in Touch</a>
+          <form className="pilot-form" onSubmit={onSubmit}>
+            <div>
+              <label htmlFor="pilot-email">work email</label>
+              <input id="pilot-email" name="email" type="email" placeholder="jane@acme.co" required />
+            </div>
+            <div className="row">
+              <div>
+                <label htmlFor="pilot-company">company</label>
+                <input id="pilot-company" name="company" type="text" placeholder="Acme Inc." />
+              </div>
+              <div>
+                <label htmlFor="pilot-volume">monthly recoveries</label>
+                <select id="pilot-volume" name="volume" defaultValue="< 1,000">
+                  <option>&lt; 1,000</option>
+                  <option>1,000&ndash;10,000</option>
+                  <option>10,000&ndash;100,000</option>
+                  <option>100,000+</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="pilot-platform">platform</label>
+              <select id="pilot-platform" name="platform" defaultValue="Web">
+                <option>Web</option>
+                <option>iOS</option>
+                <option>Android</option>
+                <option>All of the above</option>
+              </select>
+            </div>
+            <button className="btn btn-primary" type="submit">
+              Request pilot access <span className="arrow">&rarr;</span>
+            </button>
+          </form>
         </div>
-        <p style={{
-          color: '#999',
-          fontSize: 13,
-          marginTop: 20,
-          marginBottom: 0,
-        }}>
-          Free during pilot. Paid tiers <span style={{ fontStyle: 'italic' }}>TBD</span>.
-        </p>
       </div>
     </section>
   );
 }
 
 function Footer() {
-  const isMobile = useIsMobile();
   return (
-    <footer style={{
-      padding: isMobile ? '24px 20px' : '32px 40px',
-      borderTop: '1px solid #e5e7eb',
-      textAlign: 'center',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 12 }}>
-        <a href="/docs" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>API Docs</a>
-        <a href="/privacy" style={{ color: '#999', fontSize: 13, textDecoration: 'none' }}>Privacy Policy</a>
-      </div>
-      <div style={{ color: '#bbb', fontSize: 13 }}>
-        <span style={{ fontFamily: HAND, fontSize: 18, color: '#999' }}>chickenScratch</span>
-        <span style={{ margin: '0 8px' }}>&mdash;</span>
-        Biometric account recovery
+    <footer className="foot">
+      <div className="wrap foot-inner">
+        <div>&copy; 2026 chickenScratch Labs · SOC 2 Type II (in progress)</div>
+        <div className="sig">&mdash; signed, the team</div>
+        <div style={{ textAlign: 'right' }}>
+          <a href="/docs">Docs</a> · <a href="/privacy">Privacy</a>
+        </div>
       </div>
     </footer>
   );
 }
 
 export function Landing() {
+  const handleTryDemo = async () => {
+    try {
+      const result = await createDemoSession();
+      // Navigate to the live demo session on the same device — works with mouse
+      // on desktop (signature_pad handles both touch and mouse) and direct on mobile.
+      window.location.href = result.url;
+    } catch (err) {
+      alert('Couldn\'t start the demo right now. Please try again in a moment.');
+      console.error(err);
+    }
+  };
+
   return (
-    <div style={{ background: '#fff' }}>
-      <NavBar />
-      <Hero />
-      <LiveDemo />
+    <div className="landing">
+      <Nav />
+      <main className="hero-slot">
+        <Hero onTryDemo={handleTryDemo} />
+      </main>
+      <Demo />
       <HowItWorks />
-      <UseCases />
-      <Pricing />
-      <SocialProof />
-      <GetStarted />
+      <Compare />
+      <Security />
+      <Cases />
+      <Sdk />
+      <Pilot />
       <Footer />
     </div>
   );
