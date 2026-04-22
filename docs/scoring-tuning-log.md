@@ -224,7 +224,11 @@ Root cause: `NODE_ENV=production` is set on the chicken-scratch Railway service.
 
 ## Empirical data collected so far
 
-All data from user `demo-6d288749` (blair's demo enrollment on 2026-04-22 19:13 UTC). Single-sample enrollment. Touch input (no pressure).
+Data collected from two users on 2026-04-22:
+- `demo-6d288749`: demo flow, mobile touch capture, no pressure, 1-sample enrollment, CV-prior stddevs.
+- `t:0df005d7-.../demo-c11c20229039`: production flow, **desktop trackpad** capture (flat default pressure), 3-sample enrollment, real computed stddevs.
+
+Device class matters — biometric distributions differ between mobile touch, stylus+pressure, and desktop trackpad. Treat these as separate calibration regimes; don't average their observations.
 
 ### Forgery simulator — pre-tuning (PR #1 baseline, pre-Mahalanobis)
 
@@ -256,22 +260,54 @@ Real-user genuine single data point: 88.29.
 
 ### Real-attempt log
 
-| Attempt | Type | Feature | DTW | Fused sig | Circle | House | Final | Threshold | Auth |
-|---|---|---|---|---|---|---|---|---|---|
-| Pre-tuning (1st run) | Genuine demo | 48.21 | 0 | 19.28 | — | 72.40 | 36.01 | 80 | FAIL |
-| Pre-tuning (2nd run) | Genuine demo | 48.61 | 0 | 19.44 | 79.24 | 60.79 | 34.61 | 80 | FAIL |
-| DTW-fix-only | Genuine demo | 47.49 | 93.57 | 75.14 | 74.83 | 54.10 | 71.94 | 80 | FAIL |
-| Priors-bumped | Genuine demo | 85.98 | 92.72 | 90.02 | 86.73 | 81.76 | **88.29** | 80 | **PASS** |
-| Priors-bumped | Self-forgery* | 62.08 | 78.55 | 71.96 | 80.01 | 64.78 | **72.09** | 80 | FAIL ✓ |
+**Every attempt should record device class** — capture regime changes biometric distributions materially. Columns: `inputMethod` + `os` + `browser` (enough to disambiguate; `deviceClass` alone conflates phone-touch with tablet-stylus). See "Devices tested" below the tables.
+
+**Demo flow (single-sample enrollment, CV-prior stddevs):**
+
+| Attempt | Type | Device | Feature | DTW | Fused sig | Circle | House | Final | Threshold | Auth |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Pre-tuning (1st run) | Genuine demo | iPhone touch | 48.21 | 0 | 19.28 | — | 72.40 | 36.01 | 80 | FAIL |
+| Pre-tuning (2nd run) | Genuine demo | iPhone touch | 48.61 | 0 | 19.44 | 79.24 | 60.79 | 34.61 | 80 | FAIL |
+| DTW-fix-only | Genuine demo | iPhone touch | 47.49 | 93.57 | 75.14 | 74.83 | 54.10 | 71.94 | 80 | FAIL |
+| Priors-bumped | Genuine demo | iPhone touch | 85.98 | 92.72 | 90.02 | 86.73 | 81.76 | **88.29** | 80 | **PASS** |
+| Priors-bumped | Self-forgery* | iPhone touch | 62.08 | 78.55 | 71.96 | 80.01 | 64.78 | **72.09** | 80 | FAIL ✓ |
 
 *Self-forgery: "less curvy" signature, reverse-direction circle, different house with added door.
 
-**Observations from real data**:
+**Production flow (3-sample sig enrollment, real computed stddevs):**
+
+| Attempt | Type | Device | Feature | DTW | Fused sig | Shapes (c/sq/tri/h/sm) | Final | Threshold | Auth |
+|---|---|---|---|---|---|---|---|---|---|
+| Priors-bumped | Genuine prod (1st) | macOS trackpad | 66.17 | 92.71 | 82.09 | 89.84/83.79/92.47/82.43/81.19 | **83.25** | 80 | **PASS** |
+
+**Devices tested so far**:
+
+| Device | Input | Real pressure? | Notes |
+|---|---|---|---|
+| iPhone + Safari | `touch` | No (all zeros) | Mobile demo. Pressure bucket returns null → no-pressure weight scheme. |
+| macOS + Safari (trackpad) | `mouse` | No (flat default ~0.5) | Desktop production enrollment. **`supportsPressure=true` is misleading here — the browser returns a constant default, not a real sensor reading. Pressure bucket scores 100 on matching defaults, which is spurious signal.** Candidate fix: treat `inputMethod=mouse` as "no pressure" in the extractor regardless of per-point values. |
+
+**Untested devices** (worth collecting data on): Apple Pencil on iPad, Wacom tablet on desktop (both have real pressure), mouse on Windows Chrome, Android finger touch, Android stylus.
+
+**Observations**:
+
+Demo flow:
 - Kinematic CV=0.50 was correct — moved kinematic bucket score from 9.52 (crushed) to 96.41 (fine)
 - DTW stably scored 92-94 on genuine repeats, 78.55 on deliberate self-forgery
 - **Circle opposite-direction only penalized 7 points** — direction histogram may be under-weighted, or most circle features are direction-agnostic (closure, radial consistency, bounding box). Open issue.
 - Timing was the biggest forgery signal on self-forgery (-46 points), kinematic the smallest (-5). Users who change style tend to keep velocity but change rhythm.
 - Self-forgery margin: 7.91 points below threshold. Genuine margin: 8.29 points above. Thin symmetric gap.
+
+Production flow — DESKTOP TRACKPAD (1 genuine attempt so far — NOT enough for tuning):
+- **Device class is desktop trackpad**, not mobile touch. All prior calibration was on mobile demo. Different biometric regime:
+  - Pressure is a flat default reported by the browser on trackpad input, not a real sensor reading. Mahalanobis sees matching values on both sides → pressure bucket scores 100 without contributing real biometric signal. Treat this 100 as spurious. **Pressure bucket weighting (0.15 with-pressure) is currently rewarding a no-op on this device class** — that's a latent bug, see open questions.
+  - Velocity/acceleration profiles differ from touch — friction-based cursor drag vs. finger flick
+  - Trackpad input is often slower and more deliberate than touch
+  - CV priors were tuned for mobile demo; may not fit desktop trackpad
+- DTW [91.17, 92.38, 92.71] across all 3 enrollment samples — max-of-N picked up a consistent genuine signal even on trackpad. DTW seems device-agnostic.
+- **Kinematic collapsed to 33.93.** Likely two-factor: (a) enrollment σ < test-time σ (known DSV problem — 3 enrollment samples captured in one focused session underestimate real variation), (b) trackpad-vs-touch kinematic distribution mismatch against mobile-tuned priors.
+- **Margin only 3.25 points above threshold.** Uncomfortably thin for a single pass. Need 4 more genuine attempts on this same device class to see the distribution width before retuning.
+- Shape-specific score on smiley = 68.89 (vs triangle 100, circle 91) — may indicate smiley features are noisier on trackpad, or the user's smiley differs more stroke-to-stroke. Worth watching across repeats.
 
 ---
 
@@ -279,13 +315,17 @@ Real-user genuine single data point: 88.29.
 
 1. **DTW decay constant k=5** — on self-forgery DTW only dropped 14 points (92.72 → 78.55). Too forgiving? Try k=7–10 and compare.
 2. **Circle direction-sensitivity** — 7-point penalty for drawing opposite direction is weak. Options: (a) weight `directionHist*` bins more heavily, (b) add explicit stroke-sequence encoding feature, (c) reverse-sensitivity check on the circle-specific shape features.
-3. **Multi-sample production variance** — all calibration so far is from single-sample demo. Production 3-sample enrollment will use `computeStdDevs(samples)` (real empirical variance), which should:
-   - Tighten genuine tolerance (less prior uncertainty)
-   - Widen genuine-vs-forgery gap
-   - Potentially allow threshold to rise back toward 85
-4. **Threshold** — currently 80/65/35/35 as safety valve. Real goal is 85/75/40/40 (FIDO-aligned). Raise after calibration proves genuine distribution doesn't graze the gate.
+3. **Enrollment underestimates test-time variance** (new finding from first production attempt) — the matcher's computed σ across 3 enrollment samples is tighter than the user's σ at verify time because enrollment samples are captured in one focused session. Kinematic bucket scored 33.93 on a genuine verify despite correct feature extraction. Fix options, in order of preference:
+   - (a) Raise `MIN_REL_STDDEV` floor from 0.10 → 0.20 (cheap, blunt)
+   - (b) Multiply computed stddevs by a constant `REAL_STDDEV_SCALE` (e.g. 2.0) to account for the enrollment/test-time variance gap (principled, cites DSV literature)
+   - (c) Raise `MAHALANOBIS_K` from 3.0 → 4.0 (most general, affects every code path)
+   Need more production data points before choosing — see "Next calibration step" below.
+4. **Threshold** — currently 80/65/35/35 as safety valve. Real goal is 85/75/40/40 (FIDO-aligned). Raise after calibration proves genuine distribution doesn't graze the gate. First production attempt hit 83.25 — margin only 3.25 points. If next 4 attempts land similarly, threshold 80 is the ceiling, not a safety valve.
 5. **CV priors per-population** — current priors are tuned from one blair demo run. Do they hold for other users? Different hand shapes, pen vs finger, mobile vs desktop?
 6. **Bucket weights** — `pressure 0.15 / timing 0.20 / kinematic 0.25 / geometric 0.40` (with pressure) are research priors. Never measured whether kinematic or geometric should dominate.
+7. **Smiley shape-specific features** — first production attempt scored smiley shape-feat at 68.89 (vs triangle 100, circle 91, square 86). Either the user's smiley varies more stroke-to-stroke, or one of the 4 smiley features (featurePlacement / strokeSequencing / facialSymmetry / componentProportions) has a calibration issue. Watch across repeat verifies.
+8. **Misleading `supportsPressure` flag** — on `inputMethod=mouse` (trackpad) Safari returns `supportsPressure=true` and a flat default pressure value (~0.5). The extractor's `hasPressureData` check is `some(p.pressure > 0)`, which trips positive on this default, so the pressure bucket gets computed and scores 100 on baseline↔attempt identical defaults — spurious signal contributing 15% bucket weight to the overall score. **Proposed fix**: in `hasPressureData`, also require variance — `pressure > 0 AND not all points have the same pressure value`. Or gate on `inputMethod` directly: only `stylus` gets the pressure bucket. Decide after more device data comes in.
+9. **Per-device-class priors** — iPhone touch and macOS trackpad produced very different score distributions. A single set of CV priors may not fit both regimes. Options: (a) separate prior sets per device class, (b) wider universal priors that fit all cases (at cost of weaker matching), (c) defer — the production flow uses real stddevs once you have 3 samples, so prior mismatch matters less per-user-per-enrollment anyway.
 
 ---
 
@@ -361,3 +401,13 @@ Append new sections chronologically. For each change:
 3. Empirical data that drove the decision (before/after scores, forgery-sim delta)
 4. Updated "current state" table at the top if a parameter value changed
 5. Any new open questions discovered
+
+**For every real-attempt data point logged, always capture**:
+- `inputMethod` (touch / mouse / stylus)
+- `os` (iPhone / macOS / Android / Windows / ...)
+- `browser` (Safari / Chrome / Firefox / ...)
+- Whether real pressure data was captured (pressures vary) or a flat default was reported
+
+Pull via `GET /api/diagnostics/users/<username>/attempts` — each attempt includes `deviceCapabilities.{inputMethod, os, browser, supportsPressure}`. Note that `supportsPressure=true` is not reliable; verify by inspecting whether the stroke pressures have meaningful variance.
+
+Different capture regimes (phone touch vs stylus+pressure vs desktop mouse) produce different biometric distributions. Don't average across them — log and analyze separately.
