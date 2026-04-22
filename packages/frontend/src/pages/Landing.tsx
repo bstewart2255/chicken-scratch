@@ -777,7 +777,7 @@ function Footer() {
   return (
     <footer className="foot">
       <div className="wrap foot-inner">
-        <div>&copy; 2026 chickenScratch Labs · SOC 2 Type II (in progress)</div>
+        <div>&copy; 2026 Orchestrate LLC · chickenScratch is a product of Orchestrate LLC</div>
         <div className="sig">&mdash; signed, the team</div>
         <div style={{ textAlign: 'right' }}>
           <a href="/docs">Docs</a> · <a href="/privacy">Privacy</a>
