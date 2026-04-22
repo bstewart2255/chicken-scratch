@@ -63,6 +63,15 @@ export const THRESHOLDS = {
   // velocityAtPenDown averaging. Literature typically uses the first 3-5.
   PEN_DOWN_WINDOW_POINTS: 5,
 
+  // Signature score fusion (PR #3): final signature score is a weighted sum
+  // of the DTW-based sequence match and the feature-based statistical match.
+  // 0.6 DTW / 0.4 feature is Fierrez-Aguilar 2005's sum-rule prior. Will be
+  // re-tuned empirically from the post-deploy 5+5 calibration pass.
+  // When DTW is unavailable (e.g. no enrollment samples on record, an old
+  // baseline from before PR #3 rollout), the fusion degrades gracefully
+  // to feature-only scoring.
+  DTW_FUSION_WEIGHT: 0.6,
+
   // Shape scoring
   SIGNATURE_WEIGHT: 0.7,
   SHAPE_WEIGHT: 0.3,

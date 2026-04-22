@@ -6,6 +6,7 @@ import { extractAllFeatures } from '../features/extraction/index.js';
 import { extractShapeSpecificFeatures } from '../features/extraction/shape.js';
 import { extractStrokes } from '../features/extraction/helpers/stroke-parser.js';
 import { compareFeatures } from '../features/comparison/biometric-score.js';
+import { scoreSignatureAttempt } from '../features/comparison/signature-fusion.js';
 import { computeShapeScore, compareShapeFeatures } from '../features/comparison/shape-score.js';
 import { computeCombinedScore } from '../features/comparison/combined-score.js';
 import { detectDeviceClass } from '../features/device-class.js';
@@ -64,7 +65,21 @@ export async function verifySignature(
   const baselineFeatures = JSON.parse(baseline.avg_features) as AllFeatures;
   const baselineStdDevs = JSON.parse(baseline.feature_std_devs) as Record<string, number>;
 
-  const comparison = compareFeatures(baselineFeatures, attemptFeatures, baselineStdDevs);
+  // Fetch the user's enrolled stroke samples for DTW. Same-class only —
+  // DTW against a different-class reference (touch baseline vs. stylus
+  // attempt) would spuriously penalize natural capture-device differences.
+  const enrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
+  const enrollmentStrokes = enrollmentSamples.map(
+    s => JSON.parse(s.stroke_data) as RawSignatureData,
+  );
+
+  const comparison = scoreSignatureAttempt(
+    baselineFeatures,
+    baselineStdDevs,
+    enrollmentStrokes,
+    signatureData,
+    attemptFeatures,
+  );
   const threshold = THRESHOLDS.AUTH_SCORE_DEFAULT;
   const authenticated = comparison.score >= threshold;
 
@@ -156,7 +171,23 @@ export async function verifyFull(
   const attemptSigFeatures = extractAllFeatures(signatureData);
   const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
   const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
-  const sigComparison = compareFeatures(baselineSigFeatures, attemptSigFeatures, baselineSigStdDevs);
+
+  // Signature scoring uses DTW + feature fusion (PR #3). Shape biometrics
+  // further down this function still use the feature-only path — shapes
+  // enroll one sample per type so DTW's best-of-N aggregation would only
+  // see one reference, and shapes are calibration prompts (intentionally
+  // standardized) so DTW's sequence-alignment edge is smaller there.
+  const sigEnrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
+  const sigEnrollmentStrokes = sigEnrollmentSamples.map(
+    s => JSON.parse(s.stroke_data) as RawSignatureData,
+  );
+  const sigComparison = scoreSignatureAttempt(
+    baselineSigFeatures,
+    baselineSigStdDevs,
+    sigEnrollmentStrokes,
+    signatureData,
+    attemptSigFeatures,
+  );
   const signatureScore = sigComparison.score;
 
   const shapeScores: ShapeScoreBreakdown[] = [];
@@ -211,10 +242,11 @@ export async function verifyFull(
 
   // Compare device fingerprints (scoped to the current device class so we
   // don't mix a phone enrollment fingerprint against a desktop verify).
+  // Reuses sigEnrollmentSamples fetched above for DTW — avoids a duplicate
+  // repository round-trip.
   let fingerprintMatch: Record<string, unknown> | undefined;
-  const enrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
-  if (enrollmentSamples.length > 0 && signatureData.deviceCapabilities.fingerprint) {
-    const enrollDeviceCaps = JSON.parse(enrollmentSamples[0].device_capabilities);
+  if (sigEnrollmentSamples.length > 0 && signatureData.deviceCapabilities.fingerprint) {
+    const enrollDeviceCaps = JSON.parse(sigEnrollmentSamples[0].device_capabilities);
     if (enrollDeviceCaps.fingerprint) {
       const match = compareFingerprints(
         enrollDeviceCaps.fingerprint as DeviceFingerprint,

@@ -114,7 +114,7 @@ export interface MLFeatureVector {
 }
 
 export interface FeatureComparison {
-  score: number; // 0-100
+  score: number; // 0-100 — final fused score (or feature-only when DTW unavailable)
   breakdown: {
     pressure: number | null;
     timing: number;
@@ -123,4 +123,24 @@ export interface FeatureComparison {
     // `security` removed in v3; see `diagnosticFlags` for anomaly signals.
   };
   diagnosticFlags?: DiagnosticFlags;
+  /**
+   * DTW-based sequence-match score (0-100), aggregated as best-of-N across
+   * the user's enrolled stroke samples. Optional: undefined when the
+   * matcher had no enrollment samples to compare against (e.g. a pre-PR#3
+   * baseline that was never re-enrolled). See THRESHOLDS.DTW_FUSION_WEIGHT
+   * for how it's combined with the feature-based score.
+   */
+  dtwScore?: number;
+  /**
+   * Per-sample DTW similarities, one per enrolled stroke sample. Useful for
+   * diagnostics ("which enrollment did the attempt resemble?"). Omitted
+   * when DTW isn't computed.
+   */
+  dtwScores?: number[];
+  /**
+   * Pure feature-based score (0-100) before DTW fusion. Same value as
+   * `score` when DTW is unavailable. Exposed so diagnostics can show the
+   * two components separately and the fused total.
+   */
+  featureScore?: number;
 }

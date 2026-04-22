@@ -125,6 +125,35 @@ export function FeatureComparisonView({ baseline, attempt, comparison, title }: 
   return (
     <div>
       {title && <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{title}</h3>}
+      {/* DTW fusion summary — only present when the matcher had raw stroke
+          samples to align against (signatures yes, shapes no in the v3
+          architecture). Shows the feature score, DTW score, per-sample
+          DTW scores, and the fused total so a reviewer can see which
+          component drove the final number. */}
+      {typeof comparison.dtwScore === 'number' && (
+        <div style={{
+          marginBottom: 16,
+          padding: 10,
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 6,
+          fontSize: 12,
+          color: '#334155',
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Signature fusion</div>
+          <div>
+            Final (fused): <strong>{comparison.score.toFixed(1)}</strong>{' '}
+            = 0.6 × DTW <strong>{comparison.dtwScore.toFixed(1)}</strong>{' '}
+            + 0.4 × Feature <strong>{(comparison.featureScore ?? comparison.score).toFixed(1)}</strong>
+          </div>
+          {comparison.dtwScores && comparison.dtwScores.length > 0 && (
+            <div style={{ marginTop: 4, color: '#64748b' }}>
+              DTW per enrolled sample: {comparison.dtwScores.map(s => s.toFixed(1)).join(', ')}
+              {' '}(best used for fusion)
+            </div>
+          )}
+        </div>
+      )}
       <FeatureSection
         title="Pressure"
         baseline={baseline.pressure as unknown as Record<string, number> | null}

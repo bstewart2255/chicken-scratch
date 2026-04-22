@@ -160,6 +160,30 @@ export function computeDtwSimilarity(
   return decay(distance);
 }
 
+/**
+ * Score an attempt against multiple enrolled stroke samples, returning both
+ * the per-sample similarities and the aggregate. Aggregation strategy:
+ * **max-of-N** (best-match-against-any-enrolled-sample). This is the
+ * single-template convention from the DSV literature (Kholmatov & Yanikoglu,
+ * BioSecure) — it's more permissive than mean-of-N and captures the user's
+ * natural stroke-to-stroke variation better than any single reference.
+ *
+ * Returns { best, perSample } so diagnostics can show which enrollment
+ * sample the attempt resembled most (useful for debugging "why did my
+ * verify fail" and for identifying stale enrollments).
+ */
+export function computeDtwSimilarityAgainstSamples(
+  storedSamples: RawSignatureData[],
+  attempt: RawSignatureData,
+): { best: number; perSample: number[] } {
+  if (storedSamples.length === 0) {
+    return { best: 0, perSample: [] };
+  }
+  const perSample = storedSamples.map(s => computeDtwSimilarity(s, attempt));
+  const best = perSample.reduce((m, v) => (v > m ? v : m), 0);
+  return { best, perSample };
+}
+
 // Exported for tests.
 export const __test__ = {
   flattenAndNormalize,

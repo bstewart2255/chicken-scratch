@@ -18,7 +18,7 @@ import { THRESHOLDS, ALL_CHALLENGE_TYPES } from '@chicken-scratch/shared';
 import { extractAllFeatures } from '../features/extraction/index.js';
 import { extractShapeSpecificFeatures } from '../features/extraction/shape.js';
 import { extractStrokes } from '../features/extraction/helpers/stroke-parser.js';
-import { compareFeatures } from '../features/comparison/biometric-score.js';
+import { scoreSignatureAttempt } from '../features/comparison/signature-fusion.js';
 import { computeShapeScore } from '../features/comparison/shape-score.js';
 import { computeCombinedScore } from '../features/comparison/combined-score.js';
 import * as userRepo from '../db/repositories/user.repo.js';
@@ -190,7 +190,8 @@ function perturbSignatureData(
 interface EnrolledData {
   sigBaseline: AllFeatures;
   sigStdDevs: Record<string, number>;
-  sigSampleData: RawSignatureData;
+  sigSampleData: RawSignatureData;          // first sample — used as forgery source
+  sigAllSamples: RawSignatureData[];        // all enrolled samples — used as DTW references
   shapeData: {
     type: ChallengeItemType;
     baseline: { biometric: AllFeatures; shape: ShapeSpecificFeatures };
@@ -206,7 +207,15 @@ function scoreForgedAttempt(
   // Forge signature
   const forgedSig = perturbSignatureData(enrolled.sigSampleData, level);
   const forgedSigFeatures = extractAllFeatures(forgedSig);
-  const sigComparison = compareFeatures(enrolled.sigBaseline, forgedSigFeatures, enrolled.sigStdDevs);
+  // Use the full fusion path — DTW against every enrolled sample + feature
+  // scoring — so FAR numbers reflect what the real authenticator will score.
+  const sigComparison = scoreSignatureAttempt(
+    enrolled.sigBaseline,
+    enrolled.sigStdDevs,
+    enrolled.sigAllSamples,
+    forgedSig,
+    forgedSigFeatures,
+  );
   const signatureScore = sigComparison.score;
 
   // Forge each shape
@@ -296,6 +305,8 @@ export async function runForgerySimulation(
 
   // Use first signature sample as the source for perturbation
   const sigSampleData = JSON.parse(sigSamples[0].stroke_data) as RawSignatureData;
+  // All samples feed into DTW's best-of-N aggregation on each forgery attempt.
+  const sigAllSamples = sigSamples.map(s => JSON.parse(s.stroke_data) as RawSignatureData);
   const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
   const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
 
@@ -325,6 +336,7 @@ export async function runForgerySimulation(
     sigBaseline: baselineSigFeatures,
     sigStdDevs: baselineSigStdDevs,
     sigSampleData,
+    sigAllSamples,
     shapeData,
   };
 
