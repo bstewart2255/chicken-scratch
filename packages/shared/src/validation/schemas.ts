@@ -52,18 +52,34 @@ const RawSignatureDataSchema = z.object({
   capturedAt: z.string().datetime(),
 });
 
+/**
+ * Username constraints — applied uniformly to every endpoint that accepts
+ * one. Accepts both raw usernames (signed-up via the internal flow) AND
+ * tenant-prefixed internal usernames (`t:<tenantUuid>:<externalUserId>`)
+ * that flow through the mobile-session handoff. Tenant prefixes are 38
+ * characters (`t:` + 36-char UUID + `:`) before the externalUserId.
+ *
+ * - max(150): accommodates 38-char tenant prefix + reasonable externalUserId
+ *   (the tenant API caps externalUserId at ~100 chars in the route handler).
+ * - regex allows colons so `t:<uuid>:<externalUserId>` passes. Still
+ *   disallows slashes, spaces, and other characters that could cause
+ *   URL / log-injection issues. Underscores and hyphens were already
+ *   permitted for externalUserIds like `demo-c11c20229039`.
+ */
+const USERNAME_SCHEMA = z.string().min(1).max(150).regex(/^[a-zA-Z0-9_:-]+$/);
+
 export const EnrollmentRequestSchema = z.object({
-  username: z.string().min(1).max(50).regex(/^[a-zA-Z0-9_-]+$/),
+  username: USERNAME_SCHEMA,
   signatureData: RawSignatureDataSchema,
 });
 
 export const VerifyRequestSchema = z.object({
-  username: z.string().min(1).max(50),
+  username: USERNAME_SCHEMA,
   signatureData: RawSignatureDataSchema,
 });
 
 export const ShapeEnrollmentRequestSchema = z.object({
-  username: z.string().min(1).max(50).regex(/^[a-zA-Z0-9_-]+$/),
+  username: USERNAME_SCHEMA,
   shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley']),
   signatureData: RawSignatureDataSchema,
 });
@@ -74,7 +90,7 @@ const ShapeDataSchema = z.object({
 });
 
 export const FullVerifyRequestSchema = z.object({
-  username: z.string().min(1).max(50),
+  username: USERNAME_SCHEMA,
   signatureData: RawSignatureDataSchema,
   shapes: z.array(ShapeDataSchema).min(1).max(5),
   challengeId: z.string().uuid(),
@@ -86,7 +102,7 @@ export const FullVerifyRequestSchema = z.object({
 });
 
 export const CreateSessionRequestSchema = z.object({
-  username: z.string().min(1).max(50).regex(/^[a-zA-Z0-9_-]+$/),
+  username: USERNAME_SCHEMA,
   type: z.enum(['enroll', 'verify']),
 });
 
