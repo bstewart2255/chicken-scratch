@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createDemoSession } from '../api/client';
+import { createDemoSession, getSession } from '../api/client';
 import './Landing.css';
 
 /**
@@ -787,24 +787,193 @@ function Footer() {
   );
 }
 
+/**
+ * Opens from the hero's "Try the demo" button. Creates a fresh demo
+ * session, shows a QR code so desktop users can complete the flow on
+ * their phone (where touch biometrics actually shine), and polls the
+ * session until it's done — at which point we render the verification
+ * breakdown inline. Mobile users skip the QR entirely and just navigate
+ * to the demo page.
+ */
+function DemoModal({ onClose }: { onClose: () => void }) {
+  type ModalState = 'loading' | 'qr' | 'done' | 'error';
+  const [state, setState] = useState<ModalState>('loading');
+  const [demoUrl, setDemoUrl] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [error, setError] = useState('');
+  const [sessionResult, setSessionResult] = useState<Record<string, unknown> | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  const isMobile = typeof window !== 'undefined'
+    && ('ontouchstart' in window || window.innerWidth < 768);
+
+  // Session bootstrap — runs once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await createDemoSession();
+        if (cancelled) return;
+        setDemoUrl(result.url);
+        setSessionId(result.sessionId);
+
+        if (isMobile) {
+          // On mobile, no QR handoff makes sense — just navigate straight in.
+          window.location.href = result.url;
+          return;
+        }
+        setState('qr');
+      } catch (err) {
+        if (cancelled) return;
+        setError((err as Error).message);
+        setState('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [isMobile]);
+
+  // Poll session completion once we're in the QR state.
+  useEffect(() => {
+    if (state !== 'qr' || !sessionId) return;
+    const tick = async () => {
+      try {
+        const session = await getSession(sessionId);
+        if (!session) return;
+        const result = session.result as Record<string, unknown> | null;
+        if (session.status === 'completed' && result && 'authenticated' in result) {
+          setSessionResult(result);
+          setState('done');
+          if (pollRef.current) clearInterval(pollRef.current);
+        } else if (session.status === 'expired') {
+          setError('Session expired — close and try again.');
+          setState('error');
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch {
+        /* transient errors are fine; keep polling */
+      }
+    };
+    pollRef.current = window.setInterval(tick, 2000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [state, sessionId]);
+
+  // Close on Escape.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const breakdown = sessionResult?.scoreBreakdown as
+    | { signature: number; shapes: { type: string; score: number }[] }
+    | undefined;
+  const authenticated = sessionResult?.authenticated === true;
+
+  return (
+    <div className="demo-modal-backdrop" onClick={onClose}>
+      <div className="demo-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="demo-modal-close" onClick={onClose} aria-label="Close demo">&times;</button>
+
+        {state === 'loading' && (
+          <div className="demo-modal-body" style={{ textAlign: 'center' }}>
+            <span className="eyebrow" style={{ justifyContent: 'center' }}>loading</span>
+            <h3 className="demo-modal-title" style={{ marginTop: 14 }}>Setting up your demo&hellip;</h3>
+          </div>
+        )}
+
+        {state === 'qr' && (
+          <div className="demo-modal-body">
+            <span className="eyebrow">try it yourself</span>
+            <h3 className="demo-modal-title" style={{ marginTop: 14 }}>
+              Scan to try it<br />on your <span className="hand">phone.</span>
+            </h3>
+            <p className="demo-modal-lede">
+              The biometric signal is strongest on a touchscreen. Scan the code, follow the prompts,
+              and you&rsquo;ll be back here when it&rsquo;s done.
+            </p>
+
+            <div className="demo-modal-qr">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(demoUrl)}`}
+                alt="QR code for demo"
+                width={220}
+                height={220}
+              />
+            </div>
+
+            <div className="demo-modal-waiting">
+              <span className="demo-modal-dot" />
+              <span>Waiting for you to complete the demo on your phone&hellip;</span>
+            </div>
+
+            <div className="demo-modal-divider"><span>or</span></div>
+
+            <a href={demoUrl} className="btn btn-ghost demo-modal-inline-btn">
+              Continue in this browser
+            </a>
+            <p className="demo-modal-hint">You can draw with a mouse or trackpad.</p>
+          </div>
+        )}
+
+        {state === 'done' && (
+          <div className="demo-modal-body">
+            <span className="eyebrow">result</span>
+            <h3 className="demo-modal-title" style={{ marginTop: 14 }}>
+              {authenticated
+                ? <>Verified &mdash; <span className="hand">that&rsquo;s you.</span></>
+                : <>Not a match. <span className="hand">Try again.</span></>}
+            </h3>
+            <p className="demo-modal-lede">
+              {authenticated
+                ? 'Your drawing patterns matched your enrolled biometric profile.'
+                : 'The drawing patterns didn\u2019t line up with the baseline you just created.'}
+            </p>
+
+            {breakdown && (
+              <div className="demo-modal-metrics">
+                <div className="demo-modal-metric">
+                  <span>Signature</span>
+                  <b>{breakdown.signature}%</b>
+                </div>
+                {breakdown.shapes.map(s => (
+                  <div className="demo-modal-metric" key={s.type}>
+                    <span>{s.type.charAt(0).toUpperCase() + s.type.slice(1)}</span>
+                    <b>{s.score}%</b>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button className="btn btn-primary demo-modal-inline-btn" onClick={onClose}>Close</button>
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="demo-modal-body">
+            <span className="eyebrow">error</span>
+            <h3 className="demo-modal-title" style={{ marginTop: 14 }}>Something went wrong.</h3>
+            <p className="demo-modal-lede">{error || 'Please try again.'}</p>
+            <button className="btn btn-primary demo-modal-inline-btn" onClick={onClose}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Landing() {
-  const handleTryDemo = async () => {
-    try {
-      const result = await createDemoSession();
-      // Navigate to the live demo session on the same device — works with mouse
-      // on desktop (signature_pad handles both touch and mouse) and direct on mobile.
-      window.location.href = result.url;
-    } catch (err) {
-      alert('Couldn\'t start the demo right now. Please try again in a moment.');
-      console.error(err);
-    }
-  };
+  const [demoOpen, setDemoOpen] = useState(false);
 
   return (
     <div className="landing">
       <Nav />
       <main className="hero-slot">
-        <Hero onTryDemo={handleTryDemo} />
+        <Hero onTryDemo={() => setDemoOpen(true)} />
       </main>
       <Demo />
       <HowItWorks />
@@ -814,6 +983,7 @@ export function Landing() {
       <Sdk />
       <Pilot />
       <Footer />
+      {demoOpen && <DemoModal onClose={() => setDemoOpen(false)} />}
     </div>
   );
 }
