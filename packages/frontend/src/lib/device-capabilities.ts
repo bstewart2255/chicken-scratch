@@ -21,6 +21,19 @@ function detectOS(): string {
 }
 
 export function detectDeviceCapabilities(): DeviceCapabilities {
+  // `supportsPressure` reports whether the PointerEvent API exposes a
+  // `pressure` field — NOT whether a stylus is in use. iPhone Safari
+  // reports supportsPressure=true with fingers (always 0 for real touch,
+  // but the field exists). The old heuristic "supportsTouch &&
+  // supportsPressure → stylus" mis-classified every iPhone finger-touch
+  // as stylus, which cascaded server-side to device_class='desktop'
+  // (detectDeviceClass maps stylus → desktop), producing a baseline that
+  // a desktop verify could match against despite being a completely
+  // different biometric modality.
+  //
+  // Real finger-vs-stylus disambiguation can only happen at pointer-event
+  // time via `PointerEvent.pointerType === 'pen'`. The stroke collector
+  // could upgrade inputMethod → 'stylus' there if product requires it.
   const supportsPressure = 'PointerEvent' in window &&
     'pressure' in (PointerEvent.prototype || {});
 
@@ -28,9 +41,7 @@ export function detectDeviceCapabilities(): DeviceCapabilities {
     navigator.maxTouchPoints > 0;
 
   let inputMethod: DeviceCapabilities['inputMethod'] = 'mouse';
-  if (supportsTouch && supportsPressure) {
-    inputMethod = 'stylus';
-  } else if (supportsTouch) {
+  if (supportsTouch) {
     inputMethod = 'touch';
   }
 

@@ -309,6 +309,31 @@ Production flow — DESKTOP TRACKPAD (1 genuine attempt so far — NOT enough fo
 - **Margin only 3.25 points above threshold.** Uncomfortably thin for a single pass. Need 4 more genuine attempts on this same device class to see the distribution width before retuning.
 - Shape-specific score on smiley = 68.89 (vs triangle 100, circle 91) — may indicate smiley features are noisier on trackpad, or the user's smiley differs more stroke-to-stroke. Worth watching across repeats.
 
+### Device-capability detection bug — fixed, but invalidates early production data
+
+**What broke**: `detectDeviceCapabilities()` in `packages/frontend/src/lib/device-capabilities.ts` and `detectCapabilities()` in `packages/sdk/src/device.ts` both had:
+
+```typescript
+if (supportsTouch && supportsPressure) inputMethod = 'stylus';
+```
+
+But `supportsPressure` only tests whether the PointerEvent API exposes a `pressure` field — **not** whether a stylus is in use. iPhone Safari reports `true` with a finger. So every iPhone finger-touch enrollment got classified as `inputMethod='stylus'`, which cascaded through `detectDeviceClass` (which maps stylus → desktop) to a `device_class='desktop'` baseline.
+
+**What this looks like in data**: the "mobile enrollment" the user did with their finger on iPhone on 2026-04-22 21:33 UTC produced samples with:
+```
+inputMethod: 'stylus'   ← wrong
+os: 'iOS'
+device_class: 'desktop' ← cascaded wrong classification
+```
+
+Subsequent verify on MacBook trackpad (inputMethod=mouse → device_class=desktop) matched that baseline instead of bouncing on DEVICE_CLASS_MISMATCH. Score 43.16 (garbage — cross-modality). The failure mode was invisible: no error, just low score.
+
+**Fix (pushed alongside this log update)**: drop the `supportsPressure` condition. Touchscreen → `inputMethod='touch'`, period. Real stylus disambiguation requires `PointerEvent.pointerType === 'pen'` at draw time, which is not wired yet — noted as a future refinement but not blocking.
+
+**Data impact**: the desktop-production attempt logged earlier in this doc (`macOS trackpad, 83.25`) was NOT affected — that was mouse input, correctly classified all along. But the 2026-04-22 21:33 iPhone attempt's baseline is mis-classified and needs to be deleted + re-enrolled under the corrected classification. User has the admin endpoint for this.
+
+**Open cleanup**: any existing baseline with `device_class='desktop'` AND enrollment samples showing `inputMethod='stylus' + os='iOS'` is miscast. Not worth a DB migration given prod usage is ~one tester right now, but add to a future "pilot launch checklist" item.
+
 ---
 
 ## Open calibration questions

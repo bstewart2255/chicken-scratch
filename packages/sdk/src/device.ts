@@ -102,13 +102,21 @@ export function collectFingerprint(): DeviceFingerprint {
 }
 
 export function detectCapabilities(): DeviceCapabilities {
+  // supportsPressure reports whether the PointerEvent API exposes a
+  // `pressure` field — NOT whether a stylus is in use. iPhone Safari
+  // returns true even on finger-touch (API field exists; finger values
+  // are flat). Using it as a stylus signal mis-classifies iPhone
+  // finger-touch as stylus, which cascades server-side to
+  // device_class='desktop' (detectDeviceClass maps stylus → desktop)
+  // and orphans the baseline from the user's mental model. Real
+  // stylus disambiguation requires PointerEvent.pointerType at draw
+  // time. See packages/frontend/src/lib/device-capabilities.ts for
+  // the full rationale.
   const supportsPressure = 'PointerEvent' in window && 'pressure' in (PointerEvent.prototype || {});
   const supportsTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
   let inputMethod: 'mouse' | 'touch' | 'stylus' = 'mouse';
-  if (supportsTouch && supportsPressure) {
-    inputMethod = 'stylus';
-  } else if (supportsTouch) {
+  if (supportsTouch) {
     inputMethod = 'touch';
   }
 
