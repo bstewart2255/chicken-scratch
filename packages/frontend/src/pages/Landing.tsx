@@ -121,6 +121,7 @@ function Nav() {
           <a href="#compare">vs passwords</a>
           <a href="#security">Security</a>
           <a href="#sdk">SDK</a>
+          <a href="#faq">FAQ</a>
           <a href="#pilot" className="nav-cta">START PILOT &rarr;</a>
         </nav>
       </div>
@@ -698,6 +699,199 @@ function Sdk() {
   );
 }
 
+const FAQ_ITEMS: { q: string; a: React.ReactNode }[] = [
+  {
+    q: 'What exactly does chickenScratch do?',
+    a: (
+      <p>
+        We&rsquo;re a biometric account recovery service. When your users forget their password
+        or don&rsquo;t remember which email they signed up with, they sign their name (and draw
+        a shape or two) to prove it&rsquo;s them &mdash; instead of clicking an email reset link
+        or typing an SMS code. Drop-in SDK, priced per successful recovery.
+      </p>
+    ),
+  },
+  {
+    q: 'How does recovery actually work from the user\u2019s perspective?',
+    a: (
+      <p>
+        At signup, the user spends about 30 seconds signing their name and drawing a couple of
+        shapes. We store a biometric template from <em>how</em> they drew, not what. Later,
+        when they can&rsquo;t log in, your app shows them a &ldquo;sign to recover&rdquo; option.
+        They draw again. We compare to their enrollment template and return pass/fail in under a
+        second.
+      </p>
+    ),
+  },
+  {
+    q: 'What do users have to draw?',
+    a: (
+      <p>
+        A signature (their name), one shape (circle, square, or triangle), and one simple drawing
+        (smiley face or house). The shapes and drawings add orthogonal signal &mdash; someone who
+        can forge your name on paper can&rsquo;t reproduce how you draw a specific circle.
+      </p>
+    ),
+  },
+  {
+    q: 'Does the same enrollment work on my phone and my laptop?',
+    a: (
+      <>
+        <p>
+          Finger-on-touchscreen and mouse-on-desktop produce genuinely different biometric signals.
+          We detect the class at capture time and enforce same-class recovery by default: enroll on
+          mobile, recover on mobile.
+        </p>
+        <p>
+          If a user wants to recover from either, they can enroll on both classes. The SDK supports
+          a secure &ldquo;add a device&rdquo; flow gated by a recent successful verify, so an
+          attacker can&rsquo;t silently register their own device without biometric proof they&rsquo;re
+          you.
+        </p>
+      </>
+    ),
+  },
+  {
+    q: 'Can someone who has a copy of my signature fool it?',
+    a: (
+      <p>
+        No &mdash; at least not from a static image. We score on six dynamic signals: cadence (how
+        steady your pace is), velocity profile, pen-up gaps, stroke count, baseline angle, and stroke
+        order. A traced signature matches the shape but misses all six. The signals are the whole
+        point &mdash; the shape is the easy part.
+      </p>
+    ),
+  },
+  {
+    q: 'Can AI generate a signature that passes?',
+    a: (
+      <p>
+        Not directly. Image-generation models produce a picture, not a timing series. To defeat
+        chickenScratch, an attacker would need both a static image of your signature <em>and</em> a
+        motion-captured recording of you signing, then replay it against a live device &mdash; a
+        materially harder threat than &ldquo;steal your password.&rdquo; And one a defender can
+        monitor for at the device and network layers.
+      </p>
+    ),
+  },
+  {
+    q: 'Is the biometric data encrypted? Where does it live?',
+    a: (
+      <p>
+        Yes. AES-256-GCM at rest, TLS 1.2+ in transit. Templates live in Postgres on Railway (US
+        region). Raw stroke data is encrypted on receipt. The scoring API returns pass/fail only
+        &mdash; raw scores and feature vectors are never exposed to clients, preventing calibration
+        attacks.
+      </p>
+    ),
+  },
+  {
+    q: 'Is this BIPA / GDPR / CCPA compliant?',
+    a: (
+      <p>
+        Built for BIPA (Illinois), Texas CUBI, GDPR Article 9, and CCPA. Explicit informed consent
+        is collected through the SDK before any biometric data touches our servers; consent is
+        logged with timestamp, IP, and policy version. Users can withdraw consent at any time,
+        which triggers immediate data deletion. See our{' '}
+        <a href="/privacy" style={{ textDecoration: 'underline' }}>privacy policy</a> for the full
+        disclosure.
+      </p>
+    ),
+  },
+  {
+    q: 'How does a user delete their data?',
+    a: (
+      <p>
+        Through your application&rsquo;s own &ldquo;delete my account&rdquo; flow &mdash; you call{' '}
+        <code>DELETE /api/v1/users/:externalUserId</code> on our API. We permanently destroy all
+        biometric samples, baselines, and auth attempts within 72 hours. Consent records are
+        retained for 7 years as required by BIPA/GDPR, but they contain no biometric content
+        &mdash; just metadata proving consent was given and later withdrawn.
+      </p>
+    ),
+  },
+  {
+    q: 'What platforms does the SDK support?',
+    a: (
+      <p>
+        Web today (vanilla JS, React, Vue, Svelte &mdash; anywhere you can mount a DOM element).
+        iOS (Swift) and Android (Kotlin) are on the roadmap. In the meantime, the REST API works
+        from any backend language &mdash; mobile teams can wire native canvases to our API
+        directly.
+      </p>
+    ),
+  },
+  {
+    q: 'What does it cost?',
+    a: (
+      <p>
+        Free during pilots for the first 6 months, capped at 5,000 successful recoveries per
+        month. After that: $0.50 per successful recovery, with volume discounts above 10,000/mo
+        and 100,000/mo. No MAU fees, no seat pricing &mdash; if nobody forgets their password,
+        you don&rsquo;t pay us a cent.
+      </p>
+    ),
+  },
+  {
+    q: 'What happens if chickenScratch disappears?',
+    a: (
+      <>
+        <p>
+          Fair question for a solo-operated service. Three things that bound the risk:
+        </p>
+        <ul>
+          <li>
+            chickenScratch is a <em>recovery</em> factor, not primary auth. Even if we disappeared
+            overnight, your users could still log in via password, passkey, or whatever you had
+            before adding us.
+          </li>
+          <li>
+            Pilot customers can request source-code escrow &mdash; code held by a neutral third
+            party, released to you if we stop responding.
+          </li>
+          <li>
+            Biometric templates are exportable on demand via API so you can migrate them to a
+            replacement service if one exists, or just destroy them.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+];
+
+function FAQ() {
+  return (
+    <section className="sec faq" id="faq">
+      <div className="wrap">
+        <div className="sec-head">
+          <div>
+            <span className="eyebrow">frequently asked</span>
+            <h2 className="h2" style={{ marginTop: 14 }}>
+              Questions,<br />
+              <span className="hand" style={{ color: 'var(--accent)' }}>answered honestly.</span>
+            </h2>
+          </div>
+          <p className="lede">
+            The stuff your devs, your legal team, and your security team will actually want to
+            know before saying yes.
+          </p>
+        </div>
+        <div className="faq-list">
+          {FAQ_ITEMS.map((item, i) => (
+            <details className="faq-item" key={i}>
+              <summary>
+                <span className="faq-q">{item.q}</span>
+                <span className="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <div className="faq-a">{item.a}</div>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Pilot() {
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -981,6 +1175,7 @@ export function Landing() {
       <Security />
       <Cases />
       <Sdk />
+      <FAQ />
       <Pilot />
       <Footer />
       {demoOpen && <DemoModal onClose={() => setDemoOpen(false)} />}
