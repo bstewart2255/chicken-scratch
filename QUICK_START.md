@@ -9,14 +9,14 @@ The same primitive also works for step-up auth on sensitive actions (wire transf
 Your chickenScratch admin will create a tenant for your organization and provide you with:
 
 - **API Key** — starts with `cs_live_` (used to authenticate all API calls)
-- **Base URL** — `https://chicken-scratch-production.up.railway.app`
+- **Base URL** — `https://chickenscratch.io`
 
 ## 2. Add the SDK
 
 ### Option A: Script Tag (simplest)
 
 ```html
-<script src="https://chicken-scratch-production.up.railway.app/sdk/dist/chicken-scratch.js"></script>
+<script src="https://chickenscratch.io/sdk/dist/chicken-scratch.js"></script>
 ```
 
 ### Option B: npm
@@ -38,7 +38,7 @@ Your **backend server** requests a short-lived SDK token for each user session. 
 app.get('/api/auth-token', async (req, res) => {
   const userId = req.user.id; // your authenticated user
 
-  const response = await fetch('https://chicken-scratch-production.up.railway.app/api/v1/sdk-token', {
+  const response = await fetch('https://chickenscratch.io/api/v1/sdk-token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ const { token } = await fetch('/api/auth-token').then(r => r.json());
 
 const cs = new ChickenScratch({
   apiKey: token,  // cs_sdk_... token (expires in 15 min)
-  baseUrl: 'https://chicken-scratch-production.up.railway.app',
+  baseUrl: 'https://chickenscratch.io',
   container: '#auth-container',
   onComplete: (result) => {
     if (result.enrolled) {
@@ -159,13 +159,13 @@ All requests require the `X-API-Key` header (or `Authorization: Bearer` header) 
 
 ```bash
 # Record consent
-curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/consent \
+curl -X POST https://chickenscratch.io/api/v1/consent \
   -H "X-API-Key: cs_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{"externalUserId": "user-123"}'
 
 # Check consent status
-curl https://chicken-scratch-production.up.railway.app/api/v1/consent/user-123 \
+curl https://chickenscratch.io/api/v1/consent/user-123 \
   -H "X-API-Key: cs_live_your_key"
 ```
 
@@ -173,19 +173,19 @@ curl https://chicken-scratch-production.up.railway.app/api/v1/consent/user-123 \
 
 ```bash
 # Submit a signature sample (repeat 3 times)
-curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/enroll \
+curl -X POST https://chickenscratch.io/api/v1/enroll \
   -H "X-API-Key: cs_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{"externalUserId": "user-123", "signatureData": { ... }}'
 
 # Submit a shape sample
-curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/enroll/shape \
+curl -X POST https://chickenscratch.io/api/v1/enroll/shape \
   -H "X-API-Key: cs_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{"externalUserId": "user-123", "shapeType": "circle", "signatureData": { ... }}'
 
 # Check enrollment status
-curl https://chicken-scratch-production.up.railway.app/api/v1/enroll/user-123/status \
+curl https://chickenscratch.io/api/v1/enroll/user-123/status \
   -H "X-API-Key: cs_live_your_key"
 ```
 
@@ -193,13 +193,13 @@ curl https://chicken-scratch-production.up.railway.app/api/v1/enroll/user-123/st
 
 ```bash
 # Get a challenge (returns randomized shape order)
-curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/challenge \
+curl -X POST https://chickenscratch.io/api/v1/challenge \
   -H "X-API-Key: cs_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{"externalUserId": "user-123"}'
 
 # Submit verification (signature + shapes in challenge order)
-curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/verify \
+curl -X POST https://chickenscratch.io/api/v1/verify \
   -H "X-API-Key: cs_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -213,7 +213,7 @@ curl -X POST https://chicken-scratch-production.up.railway.app/api/v1/verify \
 ### User Deletion (GDPR/BIPA right to erasure)
 
 ```bash
-curl -X DELETE https://chicken-scratch-production.up.railway.app/api/v1/users/user-123 \
+curl -X DELETE https://chickenscratch.io/api/v1/users/user-123 \
   -H "X-API-Key: cs_live_your_key"
 ```
 
@@ -224,14 +224,14 @@ Before you wire the SDK into your app, run the integration-check script against 
 ```bash
 # Clone the chicken-scratch repo (or download just scripts/integration-check.mjs)
 node scripts/integration-check.mjs \
-  --base-url https://chicken-scratch-production.up.railway.app \
+  --base-url https://chickenscratch.io \
   --api-key cs_live_your_key_here
 ```
 
 Expected output:
 
 ```
-chickenScratch integration check against https://chicken-scratch-production.up.railway.app
+chickenScratch integration check against https://chickenscratch.io
 
 ✓ Backend reachable (/health) — HTTP 200
 ✓ API key accepted; SDK token issued — token cs_sdk_eyJhbGc...
@@ -274,7 +274,7 @@ The SDK propagates `errorCode` on `AuthResult` for both `enroll()` and `verify()
 
 Full OpenAPI documentation with try-it-out is available at:
 
-**https://chicken-scratch-production.up.railway.app/docs**
+**https://chickenscratch.io/docs**
 
 ## Rate Limits
 

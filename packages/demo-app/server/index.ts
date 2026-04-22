@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Config from env. These are the two things the customer's backend would
 // configure in real production — everything else the demo app handles itself.
 const CHICKEN_SCRATCH_BASE_URL = process.env.CHICKEN_SCRATCH_BASE_URL
-  ?? 'https://chicken-scratch-production.up.railway.app';
+  ?? 'https://chickenscratch.io';
 const CHICKEN_SCRATCH_API_KEY = process.env.CHICKEN_SCRATCH_API_KEY ?? '';
 const PORT = parseInt(process.env.PORT ?? '3004', 10);
 

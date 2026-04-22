@@ -2,7 +2,7 @@
 export const CURRENT_POLICY_VERSION = '1.0' as const;
 
 /** URL where the full privacy policy is hosted. */
-export const PRIVACY_POLICY_URL = 'https://chicken-scratch-production.up.railway.app/privacy' as const;
+export const PRIVACY_POLICY_URL = 'https://chickenscratch.io/privacy' as const;
 
 export const THRESHOLDS = {
   // Authentication

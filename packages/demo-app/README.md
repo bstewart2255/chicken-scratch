@@ -59,7 +59,7 @@ Set these in `packages/demo-app/.env` or export them in your shell:
 | Var                       | Default                                                 | Purpose |
 |---------------------------|---------------------------------------------------------|---------|
 | `PORT`                    | `3004`                                                  | HTTP port for the demo-app backend |
-| `CHICKEN_SCRATCH_BASE_URL`| `https://chicken-scratch-production.up.railway.app`     | Where to call for SDK token issuance and where the browser SDK talks |
+| `CHICKEN_SCRATCH_BASE_URL`| `https://chickenscratch.io`     | Where to call for SDK token issuance and where the browser SDK talks |
 | `CHICKEN_SCRATCH_API_KEY` | *(none)*                                                | Your tenant API key (starts `cs_live_`). Required for SDK token issuance. Get one from the admin dashboard. |
 
 For local dev, point `CHICKEN_SCRATCH_BASE_URL` at `http://localhost:3003` to talk to your local backend instead of production.
@@ -76,7 +76,7 @@ The demo-app is designed to deploy as a separate Railway service alongside the m
    - **Start Command:** `npm run start -w packages/demo-app`
    - **Build Command:** `npm install && npm run build -w packages/shared && npm run build -w packages/sdk && npm run build -w packages/demo-app`
 4. In the new service's Variables:
-   - `CHICKEN_SCRATCH_BASE_URL` — URL of the main chickenScratch backend (e.g. `https://chicken-scratch-production.up.railway.app`)
+   - `CHICKEN_SCRATCH_BASE_URL` — URL of the main chickenScratch backend (e.g. `https://chickenscratch.io`)
    - `CHICKEN_SCRATCH_API_KEY` — an API key generated via the admin dashboard of the main service
 5. Optional: attach a custom domain (e.g. `demo.chicken-scratch.app`). Otherwise Railway auto-assigns `*.up.railway.app`.
 

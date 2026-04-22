@@ -77,7 +77,7 @@ info:
     name: Proprietary
 
 servers:
-  - url: https://chicken-scratch-production.up.railway.app
+  - url: https://chickenscratch.io
     description: Production
   - url: http://localhost:3003
     description: Local development

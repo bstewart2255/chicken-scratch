@@ -8,7 +8,7 @@ type Phase = 'lookup' | 'pick' | 'verifying' | 'wrong-device' | 'set-password' |
 
 const CHICKEN_SCRATCH_BASE_URL =
   import.meta.env.VITE_CHICKEN_SCRATCH_BASE_URL
-  ?? 'https://chicken-scratch-production.up.railway.app';
+  ?? 'https://chickenscratch.io';
 
 export function Forgot() {
   const navigate = useNavigate();

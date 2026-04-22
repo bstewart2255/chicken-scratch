@@ -5,7 +5,7 @@ import { UIRenderer, SHAPE_LABELS } from './ui.js';
 import { detectCapabilities } from './device.js';
 
 const CURRENT_POLICY_VERSION = '1.0';
-const DEFAULT_PRIVACY_URL = 'https://chicken-scratch-production.up.railway.app/privacy';
+const DEFAULT_PRIVACY_URL = 'https://chickenscratch.io/privacy';
 
 export class ChickenScratch {
   private api: ApiClient;

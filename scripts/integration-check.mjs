@@ -24,7 +24,7 @@
  *
  * Usage:
  *   node scripts/integration-check.mjs \
- *     --base-url https://chicken-scratch-production.up.railway.app \
+ *     --base-url https://chickenscratch.io \
  *     --api-key cs_live_...
  *
  * Exits 0 if every check passes, non-zero if any fail.

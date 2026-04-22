@@ -713,7 +713,7 @@ function Pilot() {
       `Monthly recoveries: ${volume}`,
       `Platform: ${platform}`,
     ].join('\n');
-    window.location.href = `mailto:bstew510@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = `mailto:hello@chickenscratch.io?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   return (
