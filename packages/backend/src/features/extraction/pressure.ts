@@ -3,8 +3,10 @@ import { mean, stddev } from './helpers/math.js';
 import { allPoints, hasPressureData } from './helpers/stroke-parser.js';
 
 /**
- * Phase 1: Pressure & Touch Analysis (8 features)
+ * Phase 1: Pressure & Touch Analysis (7 features).
  * Returns null when device doesn't support pressure.
+ *
+ * v3: dropped `pressureRange` — fully redundant with `maxPressure - minPressure`.
  */
 export function extractPressureFeatures(strokes: Stroke[]): PressureFeatures | null {
   if (!hasPressureData(strokes)) return null;
@@ -18,7 +20,6 @@ export function extractPressureFeatures(strokes: Stroke[]): PressureFeatures | n
   const maxPressure = Math.max(...pressures);
   const minPressure = Math.min(...pressures);
   const pressureStd = stddev(pressures);
-  const pressureRange = maxPressure - minPressure;
 
   // Contact time ratio: points with pressure / total points
   const contactTimeRatio = pressures.length / points.length;
@@ -52,7 +53,6 @@ export function extractPressureFeatures(strokes: Stroke[]): PressureFeatures | n
     maxPressure,
     minPressure,
     pressureStd,
-    pressureRange,
     contactTimeRatio,
     pressureBuildupRate: mean(buildupRates),
     pressureReleaseRate: mean(releaseRates),

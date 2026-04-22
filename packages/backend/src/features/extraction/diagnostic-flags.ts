@@ -1,14 +1,21 @@
-import type { Stroke, SecurityFeatures } from '@chicken-scratch/shared';
+import type { Stroke, DiagnosticFlags } from '@chicken-scratch/shared';
 import { THRESHOLDS } from '@chicken-scratch/shared';
 import { distance, mean, stddev } from './helpers/math.js';
 
 /**
- * Phase 4: Security & Context Features (3 features)
- * Detects signs of forgery or unnatural drawing behavior.
+ * Anomaly / authenticity flags (3 signals).
+ *
+ * v3: previously `SecurityFeatures`, included as a bucket in the biometric
+ * matcher. Demoted to diagnostic signals because these are derived meta-scores
+ * computed from the same timing/velocity signal that already feeds the timing
+ * and kinematic buckets — including them in the matcher double-counts
+ * information.
+ *
+ * Still useful for fraud review, admin dashboards, and future ensemble scoring;
+ * exposed via `FeatureComparison.diagnosticFlags` on the verify response.
  */
-export function extractSecurityFeatures(strokes: Stroke[]): SecurityFeatures {
-  // Speed anomaly score: proportion of segments with unnaturally consistent speed
-  // Real humans have speed variation; robots/tracers tend to be uniform
+export function extractDiagnosticFlags(strokes: Stroke[]): DiagnosticFlags {
+  // Speed anomaly: low variance in segment speed suggests bot / tracer.
   const segmentSpeeds: number[] = [];
   for (const stroke of strokes) {
     const pts = stroke.points;
@@ -22,14 +29,13 @@ export function extractSecurityFeatures(strokes: Stroke[]): SecurityFeatures {
 
   const avgSpeed = mean(segmentSpeeds);
   const speedStd = stddev(segmentSpeeds);
-  // Low coefficient of variation = suspiciously uniform speed
+  // Coefficient of variation. Low = suspiciously uniform.
   const speedCV = avgSpeed > 0 ? speedStd / avgSpeed : 0;
-  // Score 0 = natural variation, approaching 1 = suspiciously uniform
   const speedAnomalyScore = speedCV < THRESHOLDS.SPEED_ANOMALY_THRESHOLD
     ? 1 - (speedCV / THRESHOLDS.SPEED_ANOMALY_THRESHOLD)
     : 0;
 
-  // Timing regularity score: how consistent are inter-point timing intervals
+  // Timing regularity: inter-point timing consistency.
   const timingIntervals: number[] = [];
   for (const stroke of strokes) {
     const pts = stroke.points;
@@ -40,14 +46,13 @@ export function extractSecurityFeatures(strokes: Stroke[]): SecurityFeatures {
   const timingStd = stddev(timingIntervals);
   const avgTiming = mean(timingIntervals);
   const timingCV = avgTiming > 0 ? timingStd / avgTiming : 0;
-  // Natural writing has moderate variation (CV 0.3-0.8)
-  // Too regular (< 0.1) or too chaotic (> 2.0) is suspicious
+  // Natural writing has moderate CV (0.1-2.0). Outside that range is suspicious.
   const timingRegularityScore = timingCV >= 0.1 && timingCV <= 2.0
     ? 1.0
     : Math.max(0, 1 - Math.abs(timingCV - 1.0));
 
-  // Behavioral authenticity: combined heuristic
-  // Checks for: natural speed variation, timing variation, non-zero duration
+  // Behavioral authenticity: combined heuristic — natural speed variation,
+  // natural timing variation, and non-trivial duration.
   const hasNaturalSpeed = speedCV > 0.1;
   const hasNaturalTiming = timingCV > 0.1 && timingCV < 3.0;
   const hasReasonableDuration = strokes.length > 0 &&

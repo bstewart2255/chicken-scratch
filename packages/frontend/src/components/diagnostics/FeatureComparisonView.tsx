@@ -138,16 +138,22 @@ export function FeatureComparisonView({ baseline, attempt, comparison, title }: 
         score={comparison.breakdown.timing}
       />
       <FeatureSection
+        title="Kinematic"
+        baseline={baseline.kinematic as unknown as Record<string, number>}
+        attempt={attempt.kinematic as unknown as Record<string, number>}
+        score={comparison.breakdown.kinematic}
+      />
+      <FeatureSection
         title="Geometric"
         baseline={baseline.geometric as unknown as Record<string, number>}
         attempt={attempt.geometric as unknown as Record<string, number>}
         score={comparison.breakdown.geometric}
       />
       <FeatureSection
-        title="Security"
-        baseline={baseline.security as unknown as Record<string, number>}
-        attempt={attempt.security as unknown as Record<string, number>}
-        score={comparison.breakdown.security}
+        title="Diagnostic flags (not scored)"
+        baseline={baseline.diagnosticFlags as unknown as Record<string, number>}
+        attempt={attempt.diagnosticFlags as unknown as Record<string, number>}
+        score={null}
       />
     </div>
   );

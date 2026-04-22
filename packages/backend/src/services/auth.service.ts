@@ -29,7 +29,7 @@ export async function verifySignature(
       score: 0,
       threshold: THRESHOLDS.AUTH_SCORE_DEFAULT,
       authenticated: false,
-      comparison: { score: 0, breakdown: { pressure: null, timing: 0, geometric: 0, security: 0 } },
+      comparison: { score: 0, breakdown: { pressure: null, timing: 0, kinematic: 0, geometric: 0 } },
       message: 'User not found.',
     };
   }
@@ -40,7 +40,7 @@ export async function verifySignature(
       score: 0,
       threshold: THRESHOLDS.AUTH_SCORE_DEFAULT,
       authenticated: false,
-      comparison: { score: 0, breakdown: { pressure: null, timing: 0, geometric: 0, security: 0 } },
+      comparison: { score: 0, breakdown: { pressure: null, timing: 0, kinematic: 0, geometric: 0 } },
       message: 'User has not completed enrollment.',
     };
   }
@@ -53,7 +53,7 @@ export async function verifySignature(
       score: 0,
       threshold: THRESHOLDS.AUTH_SCORE_DEFAULT,
       authenticated: false,
-      comparison: { score: 0, breakdown: { pressure: null, timing: 0, geometric: 0, security: 0 } },
+      comparison: { score: 0, breakdown: { pressure: null, timing: 0, kinematic: 0, geometric: 0 } },
       message: enrolled.length === 0
         ? 'No baseline found for user.'
         : `This device (${deviceClass}) isn't enrolled. Enrolled: ${enrolled.join(', ')}.`,

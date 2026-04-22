@@ -31,10 +31,20 @@ export function ScoreDisplay({ result }: Props) {
             <li>Pressure: {result.comparison.breakdown.pressure.toFixed(1)}</li>
           )}
           <li>Timing: {result.comparison.breakdown.timing.toFixed(1)}</li>
+          <li>Kinematic: {result.comparison.breakdown.kinematic.toFixed(1)}</li>
           <li>Geometric: {result.comparison.breakdown.geometric.toFixed(1)}</li>
-          <li>Security: {result.comparison.breakdown.security.toFixed(1)}</li>
         </ul>
       </div>
+      {result.comparison.diagnosticFlags && (
+        <div style={{ marginTop: 10, fontSize: 12, color: '#777' }}>
+          <strong>Diagnostic signals</strong> (not part of the score — inspection only):
+          <ul style={{ margin: '2px 0', paddingLeft: 20 }}>
+            <li>Speed anomaly: {result.comparison.diagnosticFlags.speedAnomalyScore.toFixed(2)}</li>
+            <li>Timing regularity: {result.comparison.diagnosticFlags.timingRegularityScore.toFixed(2)}</li>
+            <li>Behavioral authenticity: {result.comparison.diagnosticFlags.behavioralAuthenticityScore.toFixed(2)}</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

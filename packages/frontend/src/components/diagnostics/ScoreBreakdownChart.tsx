@@ -84,14 +84,14 @@ export function ScoreBreakdownChart({ attempt }: Props) {
         {/* Signature sub-scores */}
         <h4 style={{ fontSize: 13, margin: '0 0 8px', color: '#555' }}>Signature Sub-scores</h4>
         {sigBd.pressure !== null && (
-          <Bar label="Pressure" value={sigBd.pressure} max={100} color="#3b82f6" weight="20%" />
+          <Bar label="Pressure" value={sigBd.pressure} max={100} color="#3b82f6" weight="15%" />
         )}
         <Bar label="Timing" value={sigBd.timing} max={100} color="#06b6d4"
-          weight={sigBd.pressure !== null ? '30%' : '35%'} />
-        <Bar label="Geometric" value={sigBd.geometric} max={100} color="#10b981"
-          weight={sigBd.pressure !== null ? '30%' : '40%'} />
-        <Bar label="Security" value={sigBd.security} max={100} color="#f59e0b"
           weight={sigBd.pressure !== null ? '20%' : '25%'} />
+        <Bar label="Kinematic" value={sigBd.kinematic} max={100} color="#f59e0b"
+          weight={sigBd.pressure !== null ? '25%' : '30%'} />
+        <Bar label="Geometric" value={sigBd.geometric} max={100} color="#10b981"
+          weight={sigBd.pressure !== null ? '40%' : '45%'} />
 
         <div style={{ height: 1, background: '#eee', margin: '16px 0' }} />
 
@@ -137,14 +137,14 @@ export function ScoreBreakdownChart({ attempt }: Props) {
       {bd && (
         <>
           {bd.pressure !== null && (
-            <Bar label="Pressure" value={bd.pressure} max={100} color="#3b82f6" weight="20%" />
+            <Bar label="Pressure" value={bd.pressure} max={100} color="#3b82f6" weight="15%" />
           )}
           <Bar label="Timing" value={bd.timing} max={100} color="#06b6d4"
-            weight={bd.pressure !== null ? '30%' : '35%'} />
-          <Bar label="Geometric" value={bd.geometric} max={100} color="#10b981"
-            weight={bd.pressure !== null ? '30%' : '40%'} />
-          <Bar label="Security" value={bd.security} max={100} color="#f59e0b"
             weight={bd.pressure !== null ? '20%' : '25%'} />
+          <Bar label="Kinematic" value={bd.kinematic} max={100} color="#f59e0b"
+            weight={bd.pressure !== null ? '25%' : '30%'} />
+          <Bar label="Geometric" value={bd.geometric} max={100} color="#10b981"
+            weight={bd.pressure !== null ? '40%' : '45%'} />
         </>
       )}
     </div>

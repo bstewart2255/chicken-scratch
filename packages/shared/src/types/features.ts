@@ -3,14 +3,14 @@ export interface PressureFeatures {
   maxPressure: number;
   minPressure: number;
   pressureStd: number;
-  pressureRange: number;
+  // `pressureRange` removed in v3 — fully redundant with max - min.
   contactTimeRatio: number;
   pressureBuildupRate: number;
   pressureReleaseRate: number;
 }
 
 export interface TimingFeatures {
-  pauseDetection: number;
+  // `pauseDetection` (count) removed in v3 — redundant with pauseTimeRatio.
   rhythmConsistency: number;
   tempoVariation: number;
   dwellTimePatterns: number;
@@ -18,6 +18,18 @@ export interface TimingFeatures {
   drawingDurationTotal: number;
   pauseTimeRatio: number;
   avgStrokeDuration: number;
+  penUpDurationMean: number;  // v3 NEW — mean pen-up (inter-stroke) duration
+  penUpDurationStd: number;   // v3 NEW — stddev of pen-up durations
+}
+
+export interface KinematicFeatures {
+  // v3 NEW bucket — velocity + acceleration across the full trace.
+  velocityAvg: number;
+  velocityMax: number;
+  velocityStd: number;
+  velocityAtPenDown: number;  // velocity near the start of each stroke, averaged
+  accelerationAvg: number;
+  accelerationMax: number;
 }
 
 export interface GeometricFeatures {
@@ -26,11 +38,41 @@ export interface GeometricFeatures {
   smoothnessIndex: number;
   directionChanges: number;
   curvatureAnalysis: number;
-  spatialEfficiency: number;
+  // `spatialEfficiency` removed in v3 — replaced with explicit bbox features below.
   strokeOverlapRatio: number;
+  // v3 NEW — bounding-box geometry
+  bboxWidth: number;
+  bboxHeight: number;
+  aspectRatio: number;
+  centroidX: number;          // normalized to bbox: 0=left, 1=right
+  centroidY: number;          // normalized to bbox: 0=top, 1=bottom
+  // v3 NEW — stroke structure counts
+  strokeCount: number;
+  penDownCount: number;       // same as strokeCount; retained for literature alignment
+  penUpCount: number;         // strokeCount - 1 for normal input
+  // v3 NEW — critical points (local velocity minima)
+  criticalPointCount: number;
+  // v3 NEW — 8-bin direction histogram (fraction of trajectory time per direction bin)
+  directionHist0: number;     // 0° (+X / right)
+  directionHist1: number;     // 45°
+  directionHist2: number;     // 90° (+Y / down)
+  directionHist3: number;     // 135°
+  directionHist4: number;     // 180° (-X / left)
+  directionHist5: number;     // 225°
+  directionHist6: number;     // 270° (-Y / up)
+  directionHist7: number;     // 315°
 }
 
-export interface SecurityFeatures {
+/**
+ * Diagnostic flags derived from stroke kinematics that are useful for
+ * anomaly inspection / fraud review but NOT inputs to the biometric score.
+ *
+ * Previously packaged as `SecurityFeatures` and included in the matcher
+ * feature vector; demoted in v3 because these are derived meta-scores
+ * (computed from the same timing/velocity signal that already feeds
+ * timing + kinematic buckets) and were double-counting that information.
+ */
+export interface DiagnosticFlags {
   speedAnomalyScore: number;
   timingRegularityScore: number;
   behavioralAuthenticityScore: number;
@@ -39,8 +81,9 @@ export interface SecurityFeatures {
 export interface AllFeatures {
   pressure: PressureFeatures | null; // null when device doesn't support pressure
   timing: TimingFeatures;
+  kinematic: KinematicFeatures;
   geometric: GeometricFeatures;
-  security: SecurityFeatures;
+  diagnosticFlags: DiagnosticFlags;
   metadata: {
     hasPressureData: boolean;
     extractionTimeMs: number;
@@ -75,7 +118,9 @@ export interface FeatureComparison {
   breakdown: {
     pressure: number | null;
     timing: number;
+    kinematic: number;
     geometric: number;
-    security: number;
+    // `security` removed in v3; see `diagnosticFlags` for anomaly signals.
   };
+  diagnosticFlags?: DiagnosticFlags;
 }

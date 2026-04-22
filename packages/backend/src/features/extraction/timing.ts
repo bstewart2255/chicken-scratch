@@ -4,7 +4,10 @@ import { mean, stddev, distance } from './helpers/math.js';
 import { allPoints } from './helpers/stroke-parser.js';
 
 /**
- * Phase 2: Behavioral Timing Features (8 features)
+ * Phase 2: Behavioral Timing Features (9 features).
+ *
+ * v3: dropped `pauseDetection` (raw count — redundant with `pauseTimeRatio`);
+ *     added `penUpDurationMean` + `penUpDurationStd` for per-stroke-gap stats.
  */
 export function extractTimingFeatures(strokes: Stroke[]): TimingFeatures {
   const points = allPoints(strokes);
@@ -14,9 +17,8 @@ export function extractTimingFeatures(strokes: Stroke[]): TimingFeatures {
   const lastTime = points.length > 0 ? points[points.length - 1].timestamp : 0;
   const drawingDurationTotal = lastTime - firstTime;
 
-  // Inter-stroke timing and pause detection
+  // Inter-stroke (pen-up) gaps
   const interStrokeGaps: number[] = [];
-  let pauseCount = 0;
   let totalPauseTime = 0;
 
   for (let i = 1; i < strokes.length; i++) {
@@ -25,7 +27,6 @@ export function extractTimingFeatures(strokes: Stroke[]): TimingFeatures {
     const gap = currStart - prevEnd;
     interStrokeGaps.push(gap);
     if (gap > THRESHOLDS.PAUSE_DETECTION_MS) {
-      pauseCount++;
       totalPauseTime += gap;
     }
   }
@@ -58,7 +59,6 @@ export function extractTimingFeatures(strokes: Stroke[]): TimingFeatures {
   const dwellTimePatterns = points.length > 0 ? dwellCount / points.length : 0;
 
   return {
-    pauseDetection: pauseCount,
     rhythmConsistency,
     tempoVariation: mean(tempoChanges),
     dwellTimePatterns,
@@ -66,5 +66,7 @@ export function extractTimingFeatures(strokes: Stroke[]): TimingFeatures {
     drawingDurationTotal,
     pauseTimeRatio: drawingDurationTotal > 0 ? totalPauseTime / drawingDurationTotal : 0,
     avgStrokeDuration: mean(strokeDurations),
+    penUpDurationMean: mean(interStrokeGaps),
+    penUpDurationStd: stddev(interStrokeGaps),
   };
 }

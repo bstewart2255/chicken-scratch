@@ -13,6 +13,10 @@ import { mean, stddev } from '../features/extraction/helpers/math.js';
 
 /**
  * Average numeric fields across multiple feature objects.
+ *
+ * Feature layout is v3 (see packages/shared/src/types/features.ts):
+ *   pressure (7) | timing (9) | kinematic (6) | geometric (17) | diagnosticFlags (3)
+ * The first four buckets feed the matcher; diagnosticFlags is an anomaly signal.
  */
 function averageFeatures(featureSets: AllFeatures[]): AllFeatures {
   const hasPressure = featureSets.every(f => f.pressure !== null);
@@ -25,7 +29,6 @@ function averageFeatures(featureSets: AllFeatures[]): AllFeatures {
     maxPressure: avgField(f => f.pressure!.maxPressure),
     minPressure: avgField(f => f.pressure!.minPressure),
     pressureStd: avgField(f => f.pressure!.pressureStd),
-    pressureRange: avgField(f => f.pressure!.pressureRange),
     contactTimeRatio: avgField(f => f.pressure!.contactTimeRatio),
     pressureBuildupRate: avgField(f => f.pressure!.pressureBuildupRate),
     pressureReleaseRate: avgField(f => f.pressure!.pressureReleaseRate),
@@ -34,7 +37,6 @@ function averageFeatures(featureSets: AllFeatures[]): AllFeatures {
   return {
     pressure,
     timing: {
-      pauseDetection: avgField(f => f.timing.pauseDetection),
       rhythmConsistency: avgField(f => f.timing.rhythmConsistency),
       tempoVariation: avgField(f => f.timing.tempoVariation),
       dwellTimePatterns: avgField(f => f.timing.dwellTimePatterns),
@@ -42,6 +44,16 @@ function averageFeatures(featureSets: AllFeatures[]): AllFeatures {
       drawingDurationTotal: avgField(f => f.timing.drawingDurationTotal),
       pauseTimeRatio: avgField(f => f.timing.pauseTimeRatio),
       avgStrokeDuration: avgField(f => f.timing.avgStrokeDuration),
+      penUpDurationMean: avgField(f => f.timing.penUpDurationMean),
+      penUpDurationStd: avgField(f => f.timing.penUpDurationStd),
+    },
+    kinematic: {
+      velocityAvg: avgField(f => f.kinematic.velocityAvg),
+      velocityMax: avgField(f => f.kinematic.velocityMax),
+      velocityStd: avgField(f => f.kinematic.velocityStd),
+      velocityAtPenDown: avgField(f => f.kinematic.velocityAtPenDown),
+      accelerationAvg: avgField(f => f.kinematic.accelerationAvg),
+      accelerationMax: avgField(f => f.kinematic.accelerationMax),
     },
     geometric: {
       strokeComplexity: avgField(f => f.geometric.strokeComplexity),
@@ -49,13 +61,29 @@ function averageFeatures(featureSets: AllFeatures[]): AllFeatures {
       smoothnessIndex: avgField(f => f.geometric.smoothnessIndex),
       directionChanges: avgField(f => f.geometric.directionChanges),
       curvatureAnalysis: avgField(f => f.geometric.curvatureAnalysis),
-      spatialEfficiency: avgField(f => f.geometric.spatialEfficiency),
       strokeOverlapRatio: avgField(f => f.geometric.strokeOverlapRatio),
+      bboxWidth: avgField(f => f.geometric.bboxWidth),
+      bboxHeight: avgField(f => f.geometric.bboxHeight),
+      aspectRatio: avgField(f => f.geometric.aspectRatio),
+      centroidX: avgField(f => f.geometric.centroidX),
+      centroidY: avgField(f => f.geometric.centroidY),
+      strokeCount: avgField(f => f.geometric.strokeCount),
+      penDownCount: avgField(f => f.geometric.penDownCount),
+      penUpCount: avgField(f => f.geometric.penUpCount),
+      criticalPointCount: avgField(f => f.geometric.criticalPointCount),
+      directionHist0: avgField(f => f.geometric.directionHist0),
+      directionHist1: avgField(f => f.geometric.directionHist1),
+      directionHist2: avgField(f => f.geometric.directionHist2),
+      directionHist3: avgField(f => f.geometric.directionHist3),
+      directionHist4: avgField(f => f.geometric.directionHist4),
+      directionHist5: avgField(f => f.geometric.directionHist5),
+      directionHist6: avgField(f => f.geometric.directionHist6),
+      directionHist7: avgField(f => f.geometric.directionHist7),
     },
-    security: {
-      speedAnomalyScore: avgField(f => f.security.speedAnomalyScore),
-      timingRegularityScore: avgField(f => f.security.timingRegularityScore),
-      behavioralAuthenticityScore: avgField(f => f.security.behavioralAuthenticityScore),
+    diagnosticFlags: {
+      speedAnomalyScore: avgField(f => f.diagnosticFlags.speedAnomalyScore),
+      timingRegularityScore: avgField(f => f.diagnosticFlags.timingRegularityScore),
+      behavioralAuthenticityScore: avgField(f => f.diagnosticFlags.behavioralAuthenticityScore),
     },
     metadata: {
       hasPressureData: hasPressure,
@@ -92,25 +120,29 @@ function averageMLFeatures(mlSets: MLFeatureVector[]): MLFeatureVector {
 
 /**
  * Compute per-feature standard deviations across enrollment samples.
+ * Iterates whatever keys are actually on the extracted features — that way
+ * adding a new feature in the extractor automatically shows up here without
+ * a secondary edit (v3 lesson: the old hand-enumerated default-stddev map
+ * drifted out of sync with the real interfaces).
  */
 function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   const devs: Record<string, number> = {};
-  const timingKeys = Object.keys(featureSets[0].timing) as (keyof AllFeatures['timing'])[];
-  for (const key of timingKeys) {
-    devs[`timing.${key}`] = stddev(featureSets.map(f => f.timing[key]));
+  const bucketsToAverage: Array<keyof Pick<AllFeatures, 'timing' | 'kinematic' | 'geometric'>> =
+    ['timing', 'kinematic', 'geometric'];
+
+  for (const bucket of bucketsToAverage) {
+    const keys = Object.keys(featureSets[0][bucket]);
+    for (const key of keys) {
+      devs[`${bucket}.${key}`] = stddev(
+        featureSets.map(f => (f[bucket] as unknown as Record<string, number>)[key]),
+      );
+    }
   }
-  const geoKeys = Object.keys(featureSets[0].geometric) as (keyof AllFeatures['geometric'])[];
-  for (const key of geoKeys) {
-    devs[`geometric.${key}`] = stddev(featureSets.map(f => f.geometric[key]));
-  }
-  const secKeys = Object.keys(featureSets[0].security) as (keyof AllFeatures['security'])[];
-  for (const key of secKeys) {
-    devs[`security.${key}`] = stddev(featureSets.map(f => f.security[key]));
-  }
+
   if (featureSets.every(f => f.pressure !== null)) {
     const pKeys = Object.keys(featureSets[0].pressure!) as (keyof NonNullable<AllFeatures['pressure']>)[];
     for (const key of pKeys) {
-      devs[`pressure.${key}`] = stddev(featureSets.map(f => f.pressure![key]));
+      devs[`pressure.${String(key)}`] = stddev(featureSets.map(f => f.pressure![key]));
     }
   }
   return devs;
@@ -119,41 +151,47 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
 /**
  * Default standard deviations for single-sample demo baselines.
  * Without these, a 1-sample baseline would have stddev=0 for everything,
- * making verification impossibly strict. These values represent reasonable
- * variance from typical enrollment data.
+ * making verification impossibly strict. Populated by walking a dummy feature
+ * set so the keys always match the real extractors — no hand-maintained map.
  */
 function getDefaultStdDevs(): Record<string, number> {
-  return {
-    'timing.pauseDetection': 0.15,
-    'timing.rhythmConsistency': 0.1,
-    'timing.tempoVariation': 0.12,
-    'timing.dwellTimePatterns': 0.1,
-    'timing.interStrokeTiming': 0.15,
-    'timing.drawingDurationTotal': 0.2,
-    'timing.pauseTimeRatio': 0.1,
-    'timing.avgStrokeDuration': 0.15,
-    'geometric.strokeComplexity': 0.1,
-    'geometric.tremorIndex': 0.08,
-    'geometric.smoothnessIndex': 0.1,
-    'geometric.directionChanges': 0.12,
-    'geometric.curvatureAnalysis': 0.1,
-    'geometric.spatialEfficiency': 0.08,
-    'geometric.aspectRatio': 0.1,
-    'geometric.centerOfMassX': 0.15,
-    'geometric.centerOfMassY': 0.15,
-    'security.speedAnomalyScore': 0.1,
-    'security.pressureAnomalyScore': 0.1,
-    'security.directionConsistency': 0.1,
-    'security.velocitySmoothing': 0.12,
-    'pressure.avgPressure': 0.1,
-    'pressure.maxPressure': 0.1,
-    'pressure.minPressure': 0.08,
-    'pressure.pressureStd': 0.08,
-    'pressure.pressureRange': 0.1,
-    'pressure.contactTimeRatio': 0.08,
-    'pressure.pressureBuildupRate': 0.1,
-    'pressure.pressureReleaseRate': 0.1,
-  };
+  // Per-bucket default std-dev priors. Tuned for 0-1 normalized features;
+  // features with larger natural ranges (durations in ms, bbox in px) will
+  // be scaled down by the matcher's relative-error formula anyway.
+  const DEFAULT = {
+    timing: 0.12,
+    kinematic: 0.15,
+    geometric: 0.10,
+    pressure: 0.10,
+  } as const;
+
+  // Synthesize an empty feature set to get the canonical key list at runtime.
+  // Cheaper and less brittle than duplicating the interface as a hard-coded list.
+  const synthetic = extractAllFeatures({
+    strokes: [],
+    canvasSize: { width: 300, height: 150 },
+    deviceCapabilities: {
+      supportsPressure: true,
+      supportsTouch: false,
+      inputMethod: 'stylus',
+      browser: '',
+      os: '',
+    },
+    capturedAt: new Date().toISOString(),
+  });
+
+  const devs: Record<string, number> = {};
+  for (const key of Object.keys(synthetic.timing)) devs[`timing.${key}`] = DEFAULT.timing;
+  for (const key of Object.keys(synthetic.kinematic)) devs[`kinematic.${key}`] = DEFAULT.kinematic;
+  for (const key of Object.keys(synthetic.geometric)) devs[`geometric.${key}`] = DEFAULT.geometric;
+  // Pressure keys are known even though synthetic.pressure is null here.
+  const pressureKeys = [
+    'avgPressure', 'maxPressure', 'minPressure', 'pressureStd',
+    'contactTimeRatio', 'pressureBuildupRate', 'pressureReleaseRate',
+  ];
+  for (const key of pressureKeys) devs[`pressure.${key}`] = DEFAULT.pressure;
+
+  return devs;
 }
 
 /**

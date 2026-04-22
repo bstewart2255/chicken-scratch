@@ -22,12 +22,40 @@ export const THRESHOLDS = {
   TREMOR_ANGLE_RAD: Math.PI / 6,
   DIRECTION_CHANGE_ANGLE_RAD: Math.PI / 4,
 
-  // Security
+  // Anomaly detection (diagnostic flags — not inputs to the matcher)
   SPEED_ANOMALY_THRESHOLD: 0.05,
   PRESSURE_ANOMALY_THRESHOLD: 0.5,
 
   // Feature extraction
-  FEATURE_VERSION: '2.0.0',
+  // Bumped to 3.0.0: dropped pressureRange/pauseDetection/spatialEfficiency,
+  // demoted security features to diagnosticFlags, added kinematic bucket
+  // + bbox/centroid/pen-counts/crit-points/direction-histogram + penUpDuration
+  // stats. Runtime guard in compareFeatures() rejects cross-version compares.
+  FEATURE_VERSION: '3.0.0',
+
+  // Biometric-score bucket weights (sum to 1.0 in each branch).
+  // Priors — need empirical calibration on real enrollments (see
+  // docs/scoring-research.md section 4). Pressure bucket is dropped entirely
+  // for captures without pressure data; remaining buckets renormalize.
+  WEIGHT_WITH_PRESSURE: {
+    pressure: 0.15,
+    timing: 0.20,
+    kinematic: 0.25,
+    geometric: 0.40,
+  },
+  WEIGHT_NO_PRESSURE: {
+    timing: 0.25,
+    kinematic: 0.30,
+    geometric: 0.45,
+  },
+
+  // Kinematic extraction tuning
+  // Smoothing window for velocity/acceleration derivatives. Too small
+  // amplifies per-sample jitter; too large blurs real kinematic signal.
+  KINEMATIC_SMOOTH_WINDOW: 3,
+  // How many of the first N points of each stroke count as "pen-down" for
+  // velocityAtPenDown averaging. Literature typically uses the first 3-5.
+  PEN_DOWN_WINDOW_POINTS: 5,
 
   // Shape scoring
   SIGNATURE_WEIGHT: 0.7,
