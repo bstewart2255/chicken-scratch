@@ -832,31 +832,6 @@ const FAQ_ITEMS: { q: string; a: React.ReactNode }[] = [
       </p>
     ),
   },
-  {
-    q: 'What happens if chickenScratch disappears?',
-    a: (
-      <>
-        <p>
-          Fair question for a solo-operated service. Three things that bound the risk:
-        </p>
-        <ul>
-          <li>
-            chickenScratch is a <em>recovery</em> factor, not primary auth. Even if we disappeared
-            overnight, your users could still log in via password, passkey, or whatever you had
-            before adding us.
-          </li>
-          <li>
-            Pilot customers can request source-code escrow &mdash; code held by a neutral third
-            party, released to you if we stop responding.
-          </li>
-          <li>
-            Biometric templates are exportable on demand via API so you can migrate them to a
-            replacement service if one exists, or just destroy them.
-          </li>
-        </ul>
-      </>
-    ),
-  },
 ];
 
 function FAQ() {
