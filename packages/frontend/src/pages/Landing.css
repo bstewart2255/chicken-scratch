@@ -589,6 +589,115 @@
   background: var(--paper-2); color: var(--ink-2);
 }
 
+/* -------- MOBILE RESPONSIVE PASS --------
+   Targeted fixes for widths below ~720px — the existing breakpoints from
+   the original design handle 900/820/560 collapse points but left the
+   narrowest phone viewports cramped. Spot fixes here keep the visual
+   language intact while relieving specific layouts that broke. */
+
+/* Hide section-jump anchor links on mobile; keep the START PILOT CTA.
+   The whole page is a tall scroll, so section-jumping is low value on
+   a phone anyway, and the 6 links + CTA overflow a 375px viewport. */
+@media (max-width: 720px) {
+  .nav-links { gap: 12px; font-size: 13px; }
+  .nav-links a:not(.nav-cta) { display: none; }
+  .nav-inner { padding-block: 12px; }
+  .logo { font-size: 24px; }
+  .logo-tag { display: none; }
+}
+
+/* Typography — bring the hero + section headings down a notch at phone
+   widths so they don't overwhelm the column. clamp() handles part of this
+   but the `min` side was tuned for tablet, not 375-414px viewports. */
+@media (max-width: 640px) {
+  .display { font-size: clamp(40px, 10vw, 56px); }
+  .heroB h1 { font-size: clamp(36px, 9vw, 48px); }
+  .display .hand { font-size: 1.02em; }
+  .h2 { font-size: clamp(30px, 7.5vw, 42px); }
+  .lede { font-size: 16px; }
+
+  /* Section rhythm: tighten padding + sec-head gap so there's less empty
+     space between chunks when everything's stacked vertically. */
+  .sec { padding-block: clamp(48px, 9vw, 72px); }
+  .sec-head { margin-bottom: 36px; gap: 20px; }
+
+  /* Hero CTAs stack rather than wrapping awkwardly */
+  .hero-ctas { gap: 10px; }
+  .hero-ctas .btn { flex: 1 1 auto; justify-content: center; min-width: 140px; }
+
+  /* Hero pad stamp: repositioned so it doesn't overlap the drawing area
+     when the pad shrinks to phone width. */
+  .heroB-pad .stamp {
+    width: 80px; height: 80px;
+    padding: 10px;
+    font-size: 9px;
+  }
+  .heroB-chips { gap: 6px; }
+  .chip { font-size: 10px; padding: 5px 8px; }
+
+  /* Demo section: verification panel padding was set for a 500px column;
+     on phones it's ~335px wide and starts looking roomy. */
+  .verify { padding: 24px; }
+  .verify h5 { font-size: 24px; }
+  .verify .metric b { font-size: 17px; }
+  .device-screen { padding: 22px; }
+  .device-screen h4 { font-size: 24px; }
+
+  /* How-it-works steps — trim internal padding and the giant hand number */
+  .step { padding: 28px 22px 24px; min-height: 0; gap: 12px; }
+  .step .num { font-size: 64px; }
+  .step h3 { font-size: 24px; }
+
+  /* Security section: adjust the left-aligned key width so the labels
+     don't take up the whole row before any body copy shows. */
+  .spoint { grid-template-columns: 1fr; gap: 8px; }
+  .aipanel { padding: 22px; }
+  .ai-attempt { grid-template-columns: 70px 1fr auto; gap: 10px; padding: 8px 12px; }
+  .ai-attempt .mini { width: 60px; }
+
+  /* Use cases — single column with normal min-height */
+  .case { min-height: 0; padding: 22px; }
+
+  /* SDK code block + surrounding — inline meta row stacks vertically */
+  .code { padding: 22px 22px 26px; font-size: 12px; }
+  .sdk-grid > div > div[style*="display: flex"] {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  /* FAQ — questions were sized for desktop reading column */
+  .faq-item summary { padding: 18px 4px; font-size: 17px; gap: 16px; }
+  .faq-toggle { font-size: 18px; }
+  .faq-a { font-size: 14.5px; }
+
+  /* Pilot form — 2-column input row collapses to 1 column.
+     Card offset shadow looks weird at narrow widths; tone it down. */
+  .pilot-form .row { grid-template-columns: 1fr; }
+  .pilot-inner { padding: 24px; box-shadow: 6px 6px 0 var(--ink); gap: 28px; }
+  .pilot h2 { font-size: clamp(32px, 8vw, 48px); }
+
+  /* Footer — less vertical padding, centered text for narrow viewports */
+  .foot { padding-block: 28px 40px; }
+  .foot-inner { gap: 14px; }
+
+  /* Compare table: keep horizontal scroll (5 columns can't fit a phone
+     legibly) but hint at it with a bleed to the viewport edge so the
+     right-side fade is visible. */
+  .compare-wrap {
+    margin-inline: calc(-1 * var(--pad));
+    padding-inline: var(--pad);
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Demo modal — the paper-card modal was sized for desktop; at 375px
+   the content was overflowing. Shrink internal paddings. */
+@media (max-width: 560px) {
+  .demo-modal { padding: 24px 20px; border-radius: 14px; box-shadow: 6px 6px 0 var(--ink); }
+  .demo-modal-title { font-size: 26px; }
+  .demo-modal-qr img { width: 180px !important; height: 180px !important; }
+}
+
 /* -------- FAQ -------- */
 .faq-list {
   border-top: 1px solid var(--rule);
