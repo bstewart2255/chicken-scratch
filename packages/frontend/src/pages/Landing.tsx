@@ -121,7 +121,7 @@ function Nav() {
           <a href="#compare">vs passwords</a>
           <a href="#security">Security</a>
           <a href="#sdk">SDK</a>
-          <a href="#pilot" className="nav-cta">START PILOT \u2192</a>
+          <a href="#pilot" className="nav-cta">START PILOT &rarr;</a>
         </nav>
       </div>
     </header>
