@@ -46,6 +46,30 @@ export declare class ChickenScratch {
      */
     detectMyDeviceClass(): 'mobile' | 'desktop';
     /**
+     * Create a mobile-handoff verify session. Symmetric to
+     * `createMobileEnrollSession`, but for verify: user enrolled on their
+     * phone, now they're on their laptop needing to recover, and the
+     * biometric signal from a mouse/trackpad isn't interchangeable with the
+     * one from finger-touch — so route them back to their phone.
+     *
+     * `waitForCompletion()` resolves with an AuthResult that includes an
+     * `attestationToken` when verify succeeds on mobile. The token is minted
+     * server-side when the session is marked complete (see
+     * `session.service.completeSession`). Customers pass this token back
+     * to their own backend for server-to-server validation via
+     * `POST /api/v1/attestation/verify` before acting on the "verified"
+     * state (e.g. password reset).
+     */
+    createMobileVerifySession(externalUserId: string): Promise<{
+        sessionId: string;
+        url: string;
+        expiresAt: string;
+        waitForCompletion: (options?: {
+            pollIntervalMs?: number;
+            signal?: AbortSignal;
+        }) => Promise<AuthResult>;
+    }>;
+    /**
      * Create a mobile-handoff enrollment session. Returns the URL to encode
      * as a QR code + a `waitForCompletion()` helper that polls the session
      * status until the user finishes on mobile (or times out).

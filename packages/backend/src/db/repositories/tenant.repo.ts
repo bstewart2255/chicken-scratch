@@ -163,3 +163,29 @@ export async function getTenantUserCount(tenantId: string): Promise<number> {
 export function toInternalUsername(tenantId: string, externalUserId: string): string {
   return `t:${tenantId}:${externalUserId}`;
 }
+
+/**
+ * Inverse of `toInternalUsername`. Parses "t:<tenantId>:<externalUserId>"
+ * back into its components. Returns null for any username that isn't in
+ * that format (raw usernames from the internal/direct flow).
+ *
+ * Used by session completion when we need to mint tenant-scoped artifacts
+ * (e.g. attestation tokens) for a session created via the tenant API —
+ * the tenant ID is encoded in `session.username`, so we parse it out there
+ * rather than adding a `tenant_id` column to the sessions table.
+ */
+export function fromInternalUsername(
+  internalUsername: string,
+): { tenantId: string; externalUserId: string } | null {
+  if (!internalUsername.startsWith('t:')) return null;
+  // The tenant ID is a UUID (36 chars) between the first and second colons.
+  // externalUserId may itself contain colons (it shouldn't in practice but
+  // nothing prevents it), so slice based on the UUID's fixed length.
+  const rest = internalUsername.slice(2);
+  const uuidEnd = rest.indexOf(':');
+  if (uuidEnd < 0) return null;
+  const tenantId = rest.slice(0, uuidEnd);
+  const externalUserId = rest.slice(uuidEnd + 1);
+  if (!tenantId || !externalUserId) return null;
+  return { tenantId, externalUserId };
+}

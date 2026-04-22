@@ -269,6 +269,72 @@ export class ChickenScratch {
   }
 
   /**
+   * Create a mobile-handoff verify session. Symmetric to
+   * `createMobileEnrollSession`, but for verify: user enrolled on their
+   * phone, now they're on their laptop needing to recover, and the
+   * biometric signal from a mouse/trackpad isn't interchangeable with the
+   * one from finger-touch — so route them back to their phone.
+   *
+   * `waitForCompletion()` resolves with an AuthResult that includes an
+   * `attestationToken` when verify succeeds on mobile. The token is minted
+   * server-side when the session is marked complete (see
+   * `session.service.completeSession`). Customers pass this token back
+   * to their own backend for server-to-server validation via
+   * `POST /api/v1/attestation/verify` before acting on the "verified"
+   * state (e.g. password reset).
+   */
+  async createMobileVerifySession(externalUserId: string): Promise<{
+    sessionId: string;
+    url: string;
+    expiresAt: string;
+    waitForCompletion: (options?: { pollIntervalMs?: number; signal?: AbortSignal }) => Promise<AuthResult>;
+  }> {
+    const session = await this.api.createMobileSession(externalUserId, 'verify');
+
+    const waitForCompletion = async (options: { pollIntervalMs?: number; signal?: AbortSignal } = {}): Promise<AuthResult> => {
+      const pollIntervalMs = options.pollIntervalMs ?? 2000;
+      const deadline = new Date(session.expiresAt).getTime();
+
+      while (true) {
+        if (options.signal?.aborted) {
+          return { success: false, authenticated: false, message: 'Mobile verify cancelled.' };
+        }
+        if (Date.now() >= deadline) {
+          return { success: false, authenticated: false, message: 'Mobile verify session expired. Please try again.' };
+        }
+
+        const status = await this.api.getMobileSessionStatus(session.sessionId);
+        if (status.status === 'completed') {
+          const authenticated = Boolean(status.result?.authenticated);
+          const attestationToken = typeof status.result?.attestationToken === 'string'
+            ? status.result.attestationToken
+            : undefined;
+          return {
+            success: true,
+            authenticated,
+            attestationToken,
+            message: authenticated
+              ? 'Verified on mobile.'
+              : 'Mobile verify did not authenticate.',
+          };
+        }
+        if (status.status === 'expired') {
+          return { success: false, authenticated: false, message: 'Mobile verify session expired. Please try again.' };
+        }
+
+        await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    };
+
+    return {
+      sessionId: session.sessionId,
+      url: session.url,
+      expiresAt: session.expiresAt,
+      waitForCompletion,
+    };
+  }
+
+  /**
    * Create a mobile-handoff enrollment session. Returns the URL to encode
    * as a QR code + a `waitForCompletion()` helper that polls the session
    * status until the user finishes on mobile (or times out).

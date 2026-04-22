@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 import { THRESHOLDS, DEMO_CHALLENGE_TYPES, ALL_CHALLENGE_TYPES } from '@chicken-scratch/shared';
-import type { SessionType, CreateSessionResponse, ChallengeResponse } from '@chicken-scratch/shared';
+import type { SessionType, CreateSessionResponse, ChallengeResponse, DeviceClass } from '@chicken-scratch/shared';
 import * as sessionRepo from '../db/repositories/session.repo.js';
 import * as userRepo from '../db/repositories/user.repo.js';
+import * as tenantRepo from '../db/repositories/tenant.repo.js';
+import { createAttestationToken } from './attestation.service.js';
 import { query as dbQuery } from '../db/connection.js';
 import { networkInterfaces } from 'os';
 
@@ -241,6 +243,60 @@ export async function updateSessionStatus(id: string, status: 'pending' | 'in_pr
   await sessionRepo.updateSessionStatus(id, status);
 }
 
+/**
+ * Mark a session completed, enriching the result blob with a tenant-scoped
+ * attestation token when appropriate.
+ *
+ * Attestation is minted here (on session completion) rather than on the
+ * verify API call so the desktop-forgot-password-scans-mobile-QR flow can
+ * retrieve the token by polling session status. MobileSession.tsx submits
+ * the verify to the direct `/api/auth/verify/full` endpoint which doesn't
+ * mint attestation — the customer's backend needs that token to complete
+ * password reset server-to-server, so we fill the gap here.
+ *
+ * Attestation is ONLY minted when:
+ *   - Session is type='verify' (not enroll)
+ *   - result.authenticated === true (verify actually passed — we trust the
+ *     upstream verify scoring here; the session's verify endpoint is
+ *     responsible for setting authenticated=true only on genuine success)
+ *   - Session's username follows the `t:<tenantId>:<externalUserId>` format
+ *     (i.e. was created via the tenant mobile-session API) — rules out
+ *     direct-frontend sessions that shouldn't get tenant-scoped tokens
+ *   - result.deviceClass is present (the caller must supply it; attestation
+ *     is device-class-scoped and we don't want to guess)
+ *
+ * If any of the above doesn't hold, we persist the original result
+ * unchanged. No errors thrown — callers that don't need attestation (e.g.
+ * enroll sessions) are unaffected.
+ */
 export async function completeSession(id: string, result: Record<string, unknown>) {
-  await sessionRepo.completeSession(id, result);
+  const session = await sessionRepo.getSession(id);
+  if (!session) {
+    // Session expired between creation and completion — persist the result
+    // anyway so the caller's poll sees something; attestation isn't relevant.
+    await sessionRepo.completeSession(id, result);
+    return;
+  }
+
+  let enrichedResult: Record<string, unknown> = result;
+
+  const isVerifySession = session.type === 'verify';
+  const authenticated = result.authenticated === true;
+  const parsed = tenantRepo.fromInternalUsername(session.username);
+  const deviceClass = typeof result.deviceClass === 'string' ? result.deviceClass : undefined;
+
+  if (isVerifySession && authenticated && parsed && isValidDeviceClass(deviceClass)) {
+    const attestation = createAttestationToken(parsed.tenantId, parsed.externalUserId, deviceClass);
+    enrichedResult = {
+      ...result,
+      attestationToken: attestation.token,
+      attestationExpiresAt: attestation.expiresAt,
+    };
+  }
+
+  await sessionRepo.completeSession(id, enrichedResult);
+}
+
+function isValidDeviceClass(value: unknown): value is DeviceClass {
+  return value === 'mobile' || value === 'desktop';
 }

@@ -1,10 +1,18 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import QRCodeLib from 'qrcode';
 import { ChickenScratch } from '@chicken-scratch/sdk';
 import { recoveryLookup, recoveryComplete, getSdkToken, saveSession } from '../api';
 import type { LookupMatch } from '../api';
 
-type Phase = 'lookup' | 'pick' | 'verifying' | 'wrong-device' | 'set-password' | 'failed';
+type Phase =
+  | 'lookup'
+  | 'pick'
+  | 'verifying'
+  | 'verifying-mobile'
+  | 'wrong-device'
+  | 'set-password'
+  | 'failed';
 
 const CHICKEN_SCRATCH_BASE_URL =
   import.meta.env.VITE_CHICKEN_SCRATCH_BASE_URL
@@ -20,7 +28,10 @@ export function Forgot() {
   const [enrolledClasses, setEnrolledClasses] = useState<string[]>([]);
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [qrUrl, setQrUrl] = useState('');
   const widgetRef = useRef<HTMLDivElement | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mobileCancelRef = useRef<AbortController | null>(null);
 
   const doLookup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +130,68 @@ export function Forgot() {
     }
   };
 
+  // Render the QR into the canvas whenever qrUrl changes + canvas is mounted.
+  useEffect(() => {
+    if (!qrUrl || !qrCanvasRef.current) return;
+    QRCodeLib.toCanvas(qrCanvasRef.current, qrUrl, {
+      width: 240,
+      margin: 2,
+      color: { dark: '#1a1a2e', light: '#ffffff' },
+    }).catch(() => { /* non-fatal — URL is also shown as text */ });
+  }, [qrUrl, phase]);
+
+  // Clean up polling on unmount.
+  useEffect(() => () => mobileCancelRef.current?.abort(), []);
+
+  /**
+   * Switch from the 'wrong-device' screen to the mobile-QR flow. Creates a
+   * tenant-scoped mobile verify session, renders the QR, polls until the
+   * user completes on mobile. On success the polled result includes an
+   * attestation token (server-minted in session.service.completeSession)
+   * which we hand to the recovery-complete endpoint just like the desktop
+   * in-page verify path does.
+   */
+  const startMobileVerify = async () => {
+    setError('');
+    setPhase('verifying-mobile');
+
+    mobileCancelRef.current?.abort();
+    mobileCancelRef.current = new AbortController();
+    const signal = mobileCancelRef.current.signal;
+
+    try {
+      const { token } = await getSdkToken(selectedUserId, 'verify');
+      const cs = new ChickenScratch({
+        apiKey: token,
+        baseUrl: CHICKEN_SCRATCH_BASE_URL,
+        container: document.createElement('div'), // unused for this code path
+      });
+
+      const session = await cs.createMobileVerifySession(selectedUserId);
+      setQrUrl(session.url);
+
+      const result = await session.waitForCompletion({ signal });
+      if (result.authenticated && result.attestationToken) {
+        setAttestationToken(result.attestationToken);
+        setPhase('set-password');
+      } else if (!signal.aborted) {
+        setError(result.message || 'Mobile verify didn\u2019t authenticate.');
+        setPhase('failed');
+      }
+    } catch (err) {
+      if (!mobileCancelRef.current?.signal.aborted) {
+        setError((err as Error).message);
+        setPhase('failed');
+      }
+    }
+  };
+
+  const cancelMobileVerify = () => {
+    mobileCancelRef.current?.abort();
+    setQrUrl('');
+    setPhase('wrong-device');
+  };
+
   const completeRecovery = async () => {
     try {
       const session = await recoveryComplete(
@@ -211,28 +284,67 @@ export function Forgot() {
         {phase === 'wrong-device' && (
           <div>
             <div style={{ fontSize: 40, marginBottom: 8 }}>&#128241;</div>
-            <h1 style={heading}>Wrong device type</h1>
-            <p style={subheading}>
-              {error}
-            </p>
+            <h1 style={heading}>This device isn&rsquo;t enrolled</h1>
             {enrolledClasses.length > 0 && (
-              <p style={{ ...subheading, fontSize: 13 }}>
-                You enrolled on: <strong>{enrolledClasses.join(', ')}</strong>
+              <p style={{ ...subheading, fontSize: 14 }}>
+                You enrolled on: <strong>{enrolledClasses.join(', ')}</strong>.
+                Biometric signals don&rsquo;t transfer between a touchscreen and
+                a mouse/trackpad — you need to verify on the device you enrolled on.
               </p>
             )}
-            <p style={{ ...subheading, fontSize: 13, background: '#fffbea', padding: 12, borderRadius: 6 }}>
-              Try the same flow from the device type you enrolled on &mdash; the
-              biometric signal from a finger on a touchscreen is different
-              enough from a mouse/trackpad that the scoring can&rsquo;t recognize
-              you across them.
-            </p>
+            {/* If mobile is in the enrolled set, offer the QR handoff as the
+                primary path. Most common scenario: user enrolled on phone,
+                forgot-password on laptop — scanning a QR with their phone
+                is cleaner than telling them to switch devices and start over. */}
+            {enrolledClasses.includes('mobile') && (
+              <button onClick={startMobileVerify} style={primaryButton}>
+                Verify with your phone
+              </button>
+            )}
+            {enrolledClasses.includes('desktop') && !enrolledClasses.includes('mobile') && (
+              <p style={{ ...subheading, fontSize: 13, background: '#fffbea', padding: 12, borderRadius: 6 }}>
+                Open this page on your laptop or desktop (the device you
+                enrolled on) to recover.
+              </p>
+            )}
             <button
               onClick={() => { setPhase('lookup'); setError(''); setEnrolledClasses([]); }}
-              style={primaryButton}
+              style={{ ...textButton, marginTop: 8 }}
             >
               Start over
             </button>
           </div>
+        )}
+
+        {phase === 'verifying-mobile' && (
+          <ModalOverlay onClose={cancelMobileVerify}>
+            <h2 style={{ ...heading, fontSize: 18, textAlign: 'center' }}>
+              Scan with your phone
+            </h2>
+            <p style={{ ...subheading, textAlign: 'center', fontSize: 13 }}>
+              Point your phone&rsquo;s camera at the code. You&rsquo;ll sign
+              and draw your shapes on the phone; this page will continue
+              automatically.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+              {qrUrl
+                ? <canvas ref={qrCanvasRef} style={{ borderRadius: 8 }} />
+                : <div style={{ width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 13 }}>Generating code&hellip;</div>
+              }
+            </div>
+            {qrUrl && (
+              <p style={{ fontSize: 11, color: '#999', textAlign: 'center', wordBreak: 'break-all', margin: '0 0 12px' }}>
+                Or open directly: <span style={{ fontFamily: 'monospace' }}>{qrUrl}</span>
+              </p>
+            )}
+            <div style={{ padding: 10, background: '#f5f7fa', borderRadius: 6, fontSize: 12, color: '#555', textAlign: 'center', marginBottom: 12 }}>
+              Waiting for you to finish on your phone&hellip;
+            </div>
+            {error && <ErrorLine text={error} />}
+            <button onClick={cancelMobileVerify} style={textButton}>
+              Cancel
+            </button>
+          </ModalOverlay>
         )}
 
         {phase === 'set-password' && (
@@ -305,4 +417,25 @@ const linkStyle: React.CSSProperties = { color: '#4a5fc1', textDecoration: 'none
 
 function ErrorLine({ text }: { text: string }) {
   return <p style={{ color: '#c03030', fontSize: 13, marginBottom: 12 }}>{text}</p>;
+}
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(10, 10, 25, 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        padding: 16,
+      }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 10, padding: 28,
+        width: '100%', maxWidth: 380,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
 }

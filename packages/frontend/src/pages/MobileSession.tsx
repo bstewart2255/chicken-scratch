@@ -244,9 +244,13 @@ export function MobileSession() {
         stepDurations: stepDurationsRef.current,
       });
 
-      // Only pass authenticated status to session — no scores
+      // Only pass authenticated status to session — no scores. Include
+      // deviceClass so the server can mint a tenant-scoped attestation
+      // token for polling clients (desktop forgot-password flow) when
+      // verify succeeds and this session was created via the tenant API.
       await api.updateSession(sessionId!, 'completed', {
         authenticated: verifyResult.authenticated,
+        deviceClass: deviceCaps.inputMethod === 'touch' ? 'mobile' : 'desktop',
         durationMs,
         stepDurations: stepDurationsRef.current,
       });
