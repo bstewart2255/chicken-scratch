@@ -22,6 +22,30 @@ export declare class ChickenScratch {
      */
     isEnrolled(externalUserId: string): Promise<boolean>;
     /**
+     * Full enrollment status including `enrolledClasses` — which device classes
+     * ('mobile', 'desktop') this user has a baseline on. Useful for pre-flighting
+     * verify flows: if the current browsing device's class isn't in the list,
+     * surface "wrong device" immediately rather than making the user draw
+     * through the whole flow before the server bounces them.
+     */
+    getEnrollmentInfo(externalUserId: string): Promise<{
+        externalUserId: string;
+        enrolled: boolean;
+        samplesCollected: number;
+        samplesRequired: number;
+        shapesEnrolled: string[];
+        shapesRequired: string[];
+        enrolledClasses?: string[];
+    }>;
+    /**
+     * Detect the current device's class ('mobile' | 'desktop') using the same
+     * rule the server applies to incoming biometric data: touchscreens →
+     * 'mobile', everything else → 'desktop'. Matches server's detectDeviceClass
+     * after the stylus-misclassification fix — touchscreen presence is the
+     * single authoritative signal for the "which device am I holding" heuristic.
+     */
+    detectMyDeviceClass(): 'mobile' | 'desktop';
+    /**
      * Create a mobile-handoff enrollment session. Returns the URL to encode
      * as a QR code + a `waitForCompletion()` helper that polls the session
      * status until the user finishes on mobile (or times out).

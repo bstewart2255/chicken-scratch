@@ -40,14 +40,53 @@ export function Forgot() {
 
   const pickAccount = async (userId: string) => {
     setSelectedUserId(userId);
-    setPhase('verifying');
     setError('');
 
     try {
       const { token } = await getSdkToken(userId, 'verify');
-      if (!widgetRef.current) throw new Error('Widget container not mounted.');
-
       const cs = new ChickenScratch({
+        apiKey: token,
+        baseUrl: CHICKEN_SCRATCH_BASE_URL,
+        // Container is required by the constructor but we only attach the
+        // widget later when we actually enter the verifying phase.
+        container: document.createElement('div'),
+      });
+
+      // Pre-flight: which device classes has this user enrolled on? If the
+      // current device's class isn't in the list, skip straight to the
+      // wrong-device screen instead of making them draw 6 items before the
+      // server tells them the same thing. Failing gracefully if the status
+      // call errors — worst case, the user draws and we catch the mismatch
+      // server-side as before.
+      try {
+        const info = await cs.getEnrollmentInfo(userId);
+        const myClass = cs.detectMyDeviceClass();
+        if (info.enrolledClasses && info.enrolledClasses.length > 0
+            && !info.enrolledClasses.includes(myClass)) {
+          setEnrolledClasses(info.enrolledClasses);
+          setError(
+            `This device looks like ${myClass}, but you enrolled on `
+            + `${info.enrolledClasses.join(', ')}. Switch to the device you enrolled on.`,
+          );
+          setPhase('wrong-device');
+          return;
+        }
+      } catch {
+        // Pre-flight is advisory. Fall through to the real verify flow —
+        // the server-side device-class check still runs and will catch
+        // the mismatch if something odd is happening.
+      }
+
+      setPhase('verifying');
+
+      // Yield to the event loop so React commits the phase change and
+      // mounts widgetRef's div before we try to read it. setState → commit
+      // runs during React's scheduler tick; a setTimeout(0) is enough.
+      await new Promise<void>(r => setTimeout(r, 0));
+
+      // Re-instantiate with the real widget container now that we're drawing.
+      if (!widgetRef.current) throw new Error('Widget container not mounted.');
+      const verifyCs = new ChickenScratch({
         apiKey: token,
         baseUrl: CHICKEN_SCRATCH_BASE_URL,
         container: widgetRef.current,
@@ -73,7 +112,7 @@ export function Forgot() {
         },
       });
 
-      await cs.verify(userId);
+      await verifyCs.verify(userId);
     } catch (err) {
       setError((err as Error).message);
       setPhase('failed');

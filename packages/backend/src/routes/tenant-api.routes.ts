@@ -318,6 +318,11 @@ router.get('/api/v1/enroll/:externalUserId/status', async (req, res, next) => {
       samplesRequired: status.samplesRequired,
       shapesEnrolled: status.shapesEnrolled,
       shapesRequired: status.shapesRequired,
+      // Which device classes this user has enrolled baselines for. Customers
+      // use this to pre-flight verify UX: if the user's current device class
+      // isn't in this list, they can surface "wrong device" immediately
+      // instead of making them draw through the whole verify flow first.
+      enrolledClasses: status.enrolledClasses,
     });
   } catch (err) {
     next(err);

@@ -23,6 +23,14 @@ export declare class ApiClient {
         samplesRequired: number;
         shapesEnrolled: string[];
         shapesRequired: string[];
+        /**
+         * Which device classes this user has enrolled on ('mobile', 'desktop',
+         * or both). Use to pre-flight verify flows: if the browsing device's
+         * class isn't in this list, surface "wrong device" immediately instead
+         * of making the user draw through the full verify flow first.
+         * Optional for back-compat with older backends that didn't include it.
+         */
+        enrolledClasses?: string[];
     }>;
     enroll(externalUserId: string, signatureData: RawSignatureData): Promise<{
         success: boolean;
