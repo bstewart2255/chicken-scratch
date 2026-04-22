@@ -12,6 +12,7 @@ import {
   findSession,
   deleteSession,
   updatePassword,
+  seedAccounts,
 } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -228,6 +229,12 @@ if (fs.existsSync(clientDist)) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// Re-create the deterministic test account on every boot. Without this
+// the in-memory user Map is empty after any Railway redeploy / idle-shutdown,
+// and the biometric enrollment in the chickenScratch Postgres becomes
+// orphaned (still there, but no email in this demo-app maps to its ID).
+seedAccounts();
 
 app.listen(PORT, () => {
   console.log(`[demo-app] listening on http://localhost:${PORT}`);

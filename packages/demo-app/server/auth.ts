@@ -86,3 +86,47 @@ export function findUsersByEmailFragment(fragment: string): DemoUser[] {
   if (!needle) return [];
   return Array.from(users.values()).filter(u => u.email.toLowerCase().includes(needle));
 }
+
+/**
+ * Deterministic seed of a "known test account" that always exists after
+ * restart. Because the demo-app stores accounts in-memory, every Railway
+ * redeploy wipes user records — but the corresponding biometric enrollment
+ * persists in the chickenScratch Postgres. Without this seed, post-redeploy
+ * login fails with "account not found" even though the biometric is fine,
+ * and the biometric row becomes permanently orphaned from its email.
+ *
+ * Configurable via env (so credentials can change without a code edit),
+ * with defaults that match the account already enrolled in prod — so
+ * existing biometric data stays linked across restarts.
+ *
+ * Env overrides:
+ *   DEMO_SEED_EMAIL      default: blair@benefitsdesk.com
+ *   DEMO_SEED_PASSWORD   default: Password1234
+ *   DEMO_SEED_USER_ID    default: demo-c11c20229039  (must match the
+ *                        externalUserId of an existing enrollment if you
+ *                        want to preserve biometric state across restarts)
+ *
+ * Set DEMO_SEED_DISABLE=1 to skip seeding.
+ */
+export function seedAccounts(): void {
+  if (process.env.DEMO_SEED_DISABLE === '1') return;
+
+  const email = process.env.DEMO_SEED_EMAIL ?? 'blair@benefitsdesk.com';
+  const password = process.env.DEMO_SEED_PASSWORD ?? 'Password1234';
+  const fixedId = process.env.DEMO_SEED_USER_ID ?? 'demo-c11c20229039';
+
+  // Idempotent: if this email is already in the Map (seed called twice, or
+  // something upstream beat us to it), leave the existing record alone.
+  if (users.has(email)) return;
+
+  users.set(email, {
+    id: fixedId,
+    email,
+    password,
+    recoveryHint: email.split('@')[0] + '@…',
+    createdAt: new Date().toISOString(),
+  });
+  // Log so it's visible in Railway logs which seed account landed. Not
+  // logging password; email + id pair is enough to diagnose.
+  console.log(`[demo-app] seeded deterministic account: ${email} → ${fixedId}`);
+}
