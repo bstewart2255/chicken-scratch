@@ -14,6 +14,7 @@ import {
   updatePassword,
   seedAccounts,
 } from './auth.js';
+import { ensureSchema } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,13 +39,13 @@ app.use(express.json({ limit: '5mb' }));
 
 // ── Auth endpoints — a deliberately-simplistic fake auth system. ─────────────
 
-app.post('/demo-api/signup', (req, res) => {
+app.post('/demo-api/signup', async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required.' });
   }
   try {
-    const user = createUser(email, password);
+    const user = await createUser(email, password);
     const session = createSession(user.id);
     res.status(201).json({
       userId: user.id,
@@ -56,9 +57,9 @@ app.post('/demo-api/signup', (req, res) => {
   }
 });
 
-app.post('/demo-api/login', (req, res) => {
+app.post('/demo-api/login', async (req, res) => {
   const { email, password } = req.body ?? {};
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user || user.password !== password) {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
@@ -76,12 +77,12 @@ app.post('/demo-api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/demo-api/me', (req, res) => {
+app.get('/demo-api/me', async (req, res) => {
   const auth = req.header('authorization') ?? '';
   const token = auth.replace(/^Bearer\s+/i, '');
   const session = findSession(token);
   if (!session) return res.status(401).json({ error: 'Not signed in.' });
-  const user = findUserById(session.userId);
+  const user = await findUserById(session.userId);
   if (!user) return res.status(401).json({ error: 'Not signed in.' });
   res.json({ userId: user.id, email: user.email, recoveryHint: user.recoveryHint });
 });
@@ -94,9 +95,9 @@ app.get('/demo-api/me', (req, res) => {
  * In a real product, this might require additional proof of identity before
  * returning matches; the demo is simpler.
  */
-app.post('/demo-api/recovery/lookup', (req, res) => {
+app.post('/demo-api/recovery/lookup', async (req, res) => {
   const { fragment } = req.body ?? {};
-  const matches = findUsersByEmailFragment(fragment ?? '');
+  const matches = await findUsersByEmailFragment(fragment ?? '');
   // Don't return passwords or sensitive fields — just enough to let the user
   // pick the right account.
   res.json({
@@ -153,9 +154,9 @@ app.post('/demo-api/recovery/complete', async (req, res) => {
     });
   }
 
-  const user = findUserById(userId);
+  const user = await findUserById(userId);
   if (!user) return res.status(404).json({ error: 'User not found.' });
-  if (newPassword) updatePassword(userId, newPassword);
+  if (newPassword) await updatePassword(userId, newPassword);
   const session = createSession(user.id);
   res.json({
     userId: user.id,
@@ -230,16 +231,30 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-// Re-create the deterministic test account on every boot. Without this
-// the in-memory user Map is empty after any Railway redeploy / idle-shutdown,
-// and the biometric enrollment in the chickenScratch Postgres becomes
-// orphaned (still there, but no email in this demo-app maps to its ID).
-seedAccounts();
+// Bootstrap: ensure the demo_users table exists, upsert seed accounts,
+// then start listening. Before persistence was added (commit 1371cee),
+// this block was just `seedAccounts()` against an in-memory Map — every
+// Railway redeploy wiped the Map, orphaning biometric enrollments from
+// their emails. Now user records live in Postgres and survive restarts;
+// seeding is still done for deterministic test accounts.
+async function bootstrap() {
+  try {
+    await ensureSchema();
+    await seedAccounts();
+  } catch (err) {
+    // Don't fail boot hard on schema/seed errors — the app should still
+    // come up and serve its static assets even if DB is temporarily
+    // unreachable. API endpoints will surface the error at call time.
+    console.error('[demo-app] bootstrap error:', (err as Error).message);
+  }
 
-app.listen(PORT, () => {
-  console.log(`[demo-app] listening on http://localhost:${PORT}`);
-  console.log(`[demo-app] chickenScratch base URL: ${CHICKEN_SCRATCH_BASE_URL}`);
-});
+  app.listen(PORT, () => {
+    console.log(`[demo-app] listening on http://localhost:${PORT}`);
+    console.log(`[demo-app] chickenScratch base URL: ${CHICKEN_SCRATCH_BASE_URL}`);
+  });
+}
+
+bootstrap();
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
