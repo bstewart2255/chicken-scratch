@@ -3,23 +3,18 @@ import type { RawSignatureData } from '@chicken-scratch/shared';
 /**
  * Multivariate Dynamic Time Warping over signature trajectories.
  *
- * Returns a 0-100 similarity score. This matcher is a parallel alternative
- * to the feature-based biometric score — it captures per-point temporal
- * alignment (which stroke happened when, how velocity and pressure shifted
- * moment-to-moment) that scalar feature averaging cannot.
+ * Returns a 0-100 similarity score on three dimensions per point:
+ * (x, y, pressure). Feeds into the signature-fusion matcher alongside the
+ * feature-based biometric score.
  *
- * NOT YET WIRED INTO THE AUTHENTICATION DECISION. Available for benchmarking
- * and fusion experiments. The decay constant `k` and dimension weights are
- * first-cut defaults that will need empirical calibration (see
- * `docs/scoring-research.md` section 3).
+ * The decay constant `k` and dimension weights are first-cut defaults that
+ * need empirical calibration (see `docs/scoring-research.md` section 3).
  */
 
 interface NormalizedPoint {
-  x: number;
-  y: number;
-  pressure: number;
-  vx: number;
-  vy: number;
+  x: number;        // centered on centroid, divided by bbox diagonal → roughly [-0.5, 0.5]
+  y: number;        // same
+  pressure: number; // 0-1, unchanged
 }
 
 interface RawFlatPoint {
@@ -29,6 +24,21 @@ interface RawFlatPoint {
   timestamp: number;
 }
 
+/**
+ * Flatten all stroke points and normalize coordinates to be capture-
+ * independent:
+ *   - x, y translated to signature centroid and scaled by bbox diagonal
+ *     (makes DTW insensitive to canvas size + overall position)
+ *   - pressure kept in its native 0-1 range
+ *
+ * Velocity was originally included but removed after the first real-world
+ * enrollment scored 0 on DTW: raw (dx/dt) values are in px/ms and dominated
+ * the weighted Euclidean by orders of magnitude over normalized xy, so even
+ * small natural variation between enrollment and attempt exploded the DTW
+ * distance. The literature (Kholmatov & Yanikoglu; Fierrez-Aguilar) uses
+ * (x, y, pressure) only — velocity is captured implicitly by how DTW warps
+ * the time axis to align the trajectories.
+ */
 function flattenAndNormalize(data: RawSignatureData): NormalizedPoint[] {
   const flat: RawFlatPoint[] = [];
   for (const stroke of data.strokes) {
@@ -53,27 +63,17 @@ function flattenAndNormalize(data: RawSignatureData): NormalizedPoint[] {
   }
   const diag = Math.hypot(maxX - minX, maxY - minY) || 1;
 
-  const out: NormalizedPoint[] = [];
-  for (let i = 0; i < flat.length; i++) {
-    const prev = flat[Math.max(0, i - 1)];
-    const dt = flat[i].timestamp - prev.timestamp || 1;
-    const vx = ((flat[i].x - prev.x) / dt) * 100;
-    const vy = ((flat[i].y - prev.y) / dt) * 100;
-    out.push({
-      x: (flat[i].x - cx) / diag,
-      y: (flat[i].y - cy) / diag,
-      pressure: flat[i].pressure,
-      vx,
-      vy,
-    });
-  }
-  return out;
+  return flat.map(p => ({
+    x: (p.x - cx) / diag,
+    y: (p.y - cy) / diag,
+    pressure: p.pressure,
+  }));
 }
 
-// Weighted squared Euclidean distance across 5 dimensions.
-// xy weighted higher than pressure/velocity because trajectory shape is the
-// dominant per-point signal; velocity is derived and noisier.
-const DEFAULT_WEIGHTS = [1.0, 1.0, 0.5, 0.3, 0.3] as const;
+// Weighted squared Euclidean distance across 3 dimensions.
+// Trajectory shape (xy) dominates; pressure is a secondary signal and
+// often zero on touch devices without pressure sensors.
+const DEFAULT_WEIGHTS = [1.0, 1.0, 0.5] as const;
 
 function pointDistance(
   a: NormalizedPoint,
@@ -83,9 +83,7 @@ function pointDistance(
   const d =
     w[0] * (a.x - b.x) ** 2 +
     w[1] * (a.y - b.y) ** 2 +
-    w[2] * (a.pressure - b.pressure) ** 2 +
-    w[3] * (a.vx - b.vx) ** 2 +
-    w[4] * (a.vy - b.vy) ** 2;
+    w[2] * (a.pressure - b.pressure) ** 2;
   return Math.sqrt(d);
 }
 

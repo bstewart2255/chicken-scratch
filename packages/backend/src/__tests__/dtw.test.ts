@@ -79,6 +79,32 @@ describe('DTW similarity', () => {
     expect(simNoisy).toBeGreaterThan(simImpostor);
   });
 
+  it('realistic noisy genuine signature scores >= 70 (regression guard)', () => {
+    // The first prod verify under PR #3 DTW fusion scored DTW = 0 on a
+    // genuine same-session attempt. Root cause: the old dtw.ts mixed raw
+    // velocity (px/ms × 100) with normalized xy (±0.5) in the weighted
+    // Euclidean, so even a few milliseconds of timing jitter blew the
+    // distance past exp(-5·d)'s numerical floor → similarity rounded to 0.
+    // Velocity is now removed from DTW (literature-aligned — it's already
+    // implicit in how the DTW path warps the time axis). This test locks
+    // the fix: a signature drawn with realistic ±2px position and ±5ms
+    // timing jitter must now score comfortably above 70.
+    const baseSig = mkSig([diagonalStroke()]);
+
+    const jitteryPts: StrokePoint[] = [];
+    for (let i = 0; i < 20; i++) {
+      jitteryPts.push(mkPoint(
+        10 + i * 5 + (Math.random() - 0.5) * 4,           // ±2px position
+        10 + i * 3 + (Math.random() - 0.5) * 4,
+        1000 + i * 20 + Math.round((Math.random() - 0.5) * 10),  // ±5ms timing
+      ));
+    }
+    const jitterySig = mkSig([mkStroke(jitteryPts)]);
+
+    const sim = computeDtwSimilarity(baseSig, jitterySig);
+    expect(sim).toBeGreaterThanOrEqual(70);
+  });
+
   it('empty signatures score 0 instead of throwing', () => {
     const empty = mkSig([]);
     const genuine = mkSig([diagonalStroke()]);
