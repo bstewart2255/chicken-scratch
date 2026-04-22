@@ -279,6 +279,9 @@ Real-user genuine single data point: 88.29.
 | Attempt | Type | Device | Feature | DTW | Fused sig | Shapes (c/sq/tri/h/sm) | Final | Threshold | Auth |
 |---|---|---|---|---|---|---|---|---|---|
 | Priors-bumped | Genuine prod (1st) | macOS trackpad | 66.17 | 92.71 | 82.09 | 89.84/83.79/92.47/82.43/81.19 | **83.25** | 80 | **PASS** |
+| `blair-mobile-7@...` | Genuine prod (mobile enroll → mobile verify via forgot-password QR handoff) | iPhone touch | — | — | — | — | — | 80 | **PASS** |
+
+Last row: first end-to-end confirmation of the cross-device recovery flow (Fix B, commit 7379380). User signed up on desktop → chose "Enroll on mobile" → scanned QR, enrolled on iPhone with finger → later hit forgot-password on desktop → saw pre-flight wrong-device screen → clicked "Verify with your phone" → second QR → completed verify on iPhone → desktop auto-advanced to password-reset. Flow works; specific scores not logged because the pilot focus of this attempt was infrastructure, not calibration. Future attempts on this user should capture scores for distribution analysis.
 
 **Devices tested so far**:
 

@@ -284,14 +284,26 @@ export function Forgot() {
         {phase === 'wrong-device' && (
           <div>
             <div style={{ fontSize: 40, marginBottom: 8 }}>&#128241;</div>
-            <h1 style={heading}>This device isn&rsquo;t enrolled</h1>
-            {enrolledClasses.length > 0 && (
-              <p style={{ ...subheading, fontSize: 14 }}>
-                You enrolled on: <strong>{enrolledClasses.join(', ')}</strong>.
-                Biometric signals don&rsquo;t transfer between a touchscreen and
-                a mouse/trackpad — you need to verify on the device you enrolled on.
-              </p>
-            )}
+            <h1 style={heading}>Different device detected</h1>
+            {/* Framing: we recognize you, you just need to switch devices to
+                verify. Avoid "isn't enrolled" / "unknown" / "account not
+                found" phrasing — non-technical users read those as "I'm
+                locked out forever" instead of "scan the code." */}
+            {enrolledClasses.includes('mobile')
+              ? (
+                <p style={{ ...subheading, fontSize: 14 }}>
+                  We&rsquo;ve got your enrollment on file — it&rsquo;s on your phone.
+                  Biometric signals don&rsquo;t transfer between a touchscreen and
+                  a mouse/trackpad, so you&rsquo;ll need to verify on your phone.
+                </p>
+              ) : (
+                <p style={{ ...subheading, fontSize: 14 }}>
+                  We&rsquo;ve got your enrollment on file — on
+                  <strong> {enrolledClasses.join(', ') || 'a different device'}</strong>.
+                  Biometric signals don&rsquo;t transfer across device types,
+                  so you&rsquo;ll need to return to that device to verify.
+                </p>
+              )}
             {/* If mobile is in the enrolled set, offer the QR handoff as the
                 primary path. Most common scenario: user enrolled on phone,
                 forgot-password on laptop — scanning a QR with their phone
@@ -303,8 +315,8 @@ export function Forgot() {
             )}
             {enrolledClasses.includes('desktop') && !enrolledClasses.includes('mobile') && (
               <p style={{ ...subheading, fontSize: 13, background: '#fffbea', padding: 12, borderRadius: 6 }}>
-                Open this page on your laptop or desktop (the device you
-                enrolled on) to recover.
+                Open this page on the laptop or desktop where you enrolled
+                and try again.
               </p>
             )}
             <button
