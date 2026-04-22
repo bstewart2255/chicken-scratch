@@ -245,6 +245,70 @@ export class ChickenScratch {
   }
 
   /**
+   * Create a mobile-handoff enrollment session. Returns the URL to encode
+   * as a QR code + a `waitForCompletion()` helper that polls the session
+   * status until the user finishes on mobile (or times out).
+   *
+   * The SDK returns primitives rather than rendering a modal so the host
+   * app can style the QR UX however it wants. Example integration:
+   *
+   *     const { url, waitForCompletion } = await cs.createMobileEnrollSession(userId);
+   *     // render `url` as QR inside your own modal
+   *     const result = await waitForCompletion();
+   *     if (result.enrolled) { ... }
+   *
+   * The `type` parameter currently supports 'enroll' only in the demo-app
+   * integration path; 'verify' is wired backend-side for future use.
+   */
+  async createMobileEnrollSession(externalUserId: string): Promise<{
+    sessionId: string;
+    url: string;
+    expiresAt: string;
+    waitForCompletion: (options?: { pollIntervalMs?: number; signal?: AbortSignal }) => Promise<AuthResult>;
+  }> {
+    const session = await this.api.createMobileSession(externalUserId, 'enroll');
+
+    const waitForCompletion = async (options: { pollIntervalMs?: number; signal?: AbortSignal } = {}): Promise<AuthResult> => {
+      const pollIntervalMs = options.pollIntervalMs ?? 2000;
+      const deadline = new Date(session.expiresAt).getTime();
+
+      while (true) {
+        if (options.signal?.aborted) {
+          return { success: false, enrolled: false, message: 'Mobile enrollment cancelled.' };
+        }
+        if (Date.now() >= deadline) {
+          return { success: false, enrolled: false, message: 'Mobile enrollment session expired. Please try again.' };
+        }
+
+        const status = await this.api.getMobileSessionStatus(session.sessionId);
+        if (status.status === 'completed') {
+          // Mobile side writes a result blob when the user finishes. For
+          // enrollment we report enrolled=true; the mobile flow wouldn't
+          // mark completed otherwise.
+          const enrolled = Boolean(status.result?.enrolled ?? true);
+          return {
+            success: true,
+            enrolled,
+            message: enrolled ? 'Enrollment completed on mobile.' : 'Mobile enrollment did not complete.',
+          };
+        }
+        if (status.status === 'expired') {
+          return { success: false, enrolled: false, message: 'Mobile enrollment session expired. Please try again.' };
+        }
+
+        await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    };
+
+    return {
+      sessionId: session.sessionId,
+      url: session.url,
+      expiresAt: session.expiresAt,
+      waitForCompletion,
+    };
+  }
+
+  /**
    * Wait for the user to draw something and click submit.
    * Returns a promise that resolves with the stroke data.
    */

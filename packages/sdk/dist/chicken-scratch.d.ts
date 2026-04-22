@@ -22,6 +22,31 @@ export declare class ChickenScratch {
      */
     isEnrolled(externalUserId: string): Promise<boolean>;
     /**
+     * Create a mobile-handoff enrollment session. Returns the URL to encode
+     * as a QR code + a `waitForCompletion()` helper that polls the session
+     * status until the user finishes on mobile (or times out).
+     *
+     * The SDK returns primitives rather than rendering a modal so the host
+     * app can style the QR UX however it wants. Example integration:
+     *
+     *     const { url, waitForCompletion } = await cs.createMobileEnrollSession(userId);
+     *     // render `url` as QR inside your own modal
+     *     const result = await waitForCompletion();
+     *     if (result.enrolled) { ... }
+     *
+     * The `type` parameter currently supports 'enroll' only in the demo-app
+     * integration path; 'verify' is wired backend-side for future use.
+     */
+    createMobileEnrollSession(externalUserId: string): Promise<{
+        sessionId: string;
+        url: string;
+        expiresAt: string;
+        waitForCompletion: (options?: {
+            pollIntervalMs?: number;
+            signal?: AbortSignal;
+        }) => Promise<AuthResult>;
+    }>;
+    /**
      * Wait for the user to draw something and click submit.
      * Returns a promise that resolves with the stroke data.
      */

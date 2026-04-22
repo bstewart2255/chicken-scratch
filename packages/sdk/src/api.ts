@@ -132,4 +132,42 @@ export class ApiClient {
       body: JSON.stringify(body),
     });
   }
+
+  /**
+   * Create a short-lived mobile handoff session. Returned `url` encodes a
+   * session ID that the user scans as a QR code on their phone — the
+   * main-frontend /mobile/<id> page handles the capture flow there. Caller
+   * polls `getMobileSessionStatus()` to detect completion.
+   *
+   * Intended for desktop → mobile enrollment handoff, where the customer's
+   * user is signing up on a laptop and we want the richer biometric signal
+   * a phone produces (real touch position data instead of trackpad cursor
+   * events, richer kinematics).
+   */
+  async createMobileSession(externalUserId: string, type: 'enroll' | 'verify') {
+    return this.request<{
+      success: boolean;
+      sessionId: string;
+      url: string;
+      expiresAt: string;
+    }>('/api/v1/mobile-session', {
+      method: 'POST',
+      body: JSON.stringify({ externalUserId, type }),
+    });
+  }
+
+  /**
+   * Poll a mobile handoff session's status. Returns `status`: `'pending'`
+   * while waiting for the user to open the link, `'in_progress'` while
+   * they're capturing, `'completed'` when done (with `result` blob), or
+   * `'expired'` past TTL (5 min).
+   */
+  async getMobileSessionStatus(sessionId: string) {
+    return this.request<{
+      success: boolean;
+      status: 'pending' | 'in_progress' | 'completed' | 'expired';
+      result: Record<string, unknown> | null;
+      expiresAt: string;
+    }>(`/api/v1/mobile-session/${encodeURIComponent(sessionId)}`);
+  }
 }

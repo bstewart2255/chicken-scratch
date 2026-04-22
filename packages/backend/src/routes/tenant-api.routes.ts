@@ -6,7 +6,7 @@ import { verifyRateLimit, enrollRateLimit } from '../middleware/rate-limit.js';
 import { TenantEnrollRequestSchema, TenantShapeEnrollRequestSchema, TenantVerifyFullRequestSchema, TenantChallengeRequestSchema } from './tenant-api.schemas.js';
 import { enrollSample, enrollShape, getEnrollmentStatus } from '../services/enrollment.service.js';
 import { verifyFull } from '../services/auth.service.js';
-import { createChallenge } from '../services/session.service.js';
+import { createChallenge, createSession as createSessionSvc, getSessionStatus } from '../services/session.service.js';
 import { recordConsent, getConsentStatus, withdrawConsent, checkConsentGate, deleteUser } from '../services/consent.service.js';
 import { checkLockout, lockoutMessage } from '../services/lockout.service.js';
 import { createSdkToken } from '../services/sdk-token.service.js';
@@ -600,6 +600,87 @@ router.get('/api/v1/events/:externalUserId', async (req, res, next) => {
   try {
     const tenant = req.tenant!;
     await handleEventList(tenant.id, req.params.externalUserId, req, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Mobile session handoff ──────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/mobile-session
+ * Create a short-lived session the user can complete on their phone by
+ * scanning a QR code. Used for desktop → mobile enrollment handoff (mobile
+ * capture produces a richer biometric signal than desktop trackpad).
+ *
+ * Tenant-scoped: resolves externalUserId to the tenant's internal username
+ * (creating the user mapping if missing — enrollment flow does that anyway).
+ * Session TTL is the standard 5 minutes.
+ *
+ * The returned `url` points to the main frontend's /mobile/<id> page which
+ * already handles the capture flow. Session status can be polled via
+ * GET /api/v1/mobile-session/:id.
+ */
+router.post('/api/v1/mobile-session', async (req, res, next) => {
+  try {
+    const tenant = req.tenant!;
+    const { externalUserId, type } = req.body ?? {};
+
+    if (!externalUserId || typeof externalUserId !== 'string') {
+      res.status(400).json(errorBody('MISSING_FIELD', 'externalUserId is required.'));
+      return;
+    }
+    if (type !== 'enroll' && type !== 'verify') {
+      res.status(400).json(errorBody('INVALID_REQUEST', "type must be 'enroll' or 'verify'."));
+      return;
+    }
+
+    // Enrollment creates the tenant-user mapping on first call; verify
+    // requires the mapping to already exist.
+    const resolved = await resolveUser(tenant.id, externalUserId, type === 'enroll');
+    if (!resolved.exists && type === 'verify') {
+      res.status(404).json(errorBody('USER_NOT_FOUND', `No enrollment found for externalUserId=${externalUserId}.`));
+      return;
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await createSessionSvc(resolved.username, type, baseUrl);
+
+    res.json({
+      success: true,
+      sessionId: result.sessionId,
+      url: result.url,
+      expiresAt: result.expiresAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/mobile-session/:id
+ * Lightweight polling endpoint. Returns just the session lifecycle state
+ * (status + result blob) — the caller uses this to know when the user
+ * has finished on mobile. Does NOT return the session's internal username
+ * or shape order (minor info-hygiene — those aren't needed for polling).
+ *
+ * Not strictly tenant-scoped: any caller with the session ID can poll.
+ * Session IDs are UUIDs (unguessable), TTL is 5 min, and the only data
+ * exposed is the session's own status/result — no cross-tenant leakage.
+ * The endpoint lives under /api/v1 so it rides the same auth middleware
+ * and rate limits as the rest of the tenant surface.
+ */
+router.get('/api/v1/mobile-session/:id', async (req, res, next) => {
+  try {
+    const status = await getSessionStatus(req.params.id);
+    if (!status) {
+      res.status(404).json(errorBody('USER_NOT_FOUND', 'Session not found or expired.'));
+      return;
+    }
+    res.json({
+      success: true,
+      ...status,
+    });
   } catch (err) {
     next(err);
   }

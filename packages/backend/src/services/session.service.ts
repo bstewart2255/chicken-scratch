@@ -70,6 +70,25 @@ export async function createSession(
 }
 
 /**
+ * Get just the lifecycle-relevant bits of a session — `status` and `result`.
+ * Used by the tenant-scoped mobile-session polling endpoint. Deliberately
+ * narrower than getSession() so the tenant can't read back shapeOrder or
+ * the full internal username (minor info-hygiene).
+ */
+export async function getSessionStatus(id: string): Promise<
+  { status: string; result: Record<string, unknown> | null; expiresAt: string } | null
+> {
+  await sessionRepo.expireOldSessions();
+  const session = await sessionRepo.getSession(id);
+  if (!session) return null;
+  return {
+    status: session.status,
+    result: session.result ? JSON.parse(session.result) : null,
+    expiresAt: new Date(session.expires_at).toISOString(),
+  };
+}
+
+/**
  * Create a challenge for desktop verification (no QR session).
  */
 export async function createChallenge(username: string): Promise<ChallengeResponse> {
