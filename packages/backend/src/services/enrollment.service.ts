@@ -165,15 +165,19 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
  * nonsense across the wildly different magnitudes in the feature set.
  */
 function getDefaultStdDevs(baseline: AllFeatures): Record<string, number> {
-  // Coefficient-of-variation priors per bucket. These are informed guesses;
-  // they'll be replaced by empirically-measured values after the first
-  // N genuine verify attempts worth of calibration data (see research doc
-  // section 4 — post-PR calibration pass).
+  // Coefficient-of-variation priors per bucket. Substantially looser than
+  // the initial guess — the first prod run showed kinematic features
+  // scoring ~10/100 on a same-session genuine verify, because real online-
+  // signature velocity CV is 30-50% (Plamondon-Djioua lognormal theory,
+  // Martinez-Diaz et al.) and I'd set the kinematic prior at 0.18. Timing
+  // and geometric features also have higher real-world CV than I first
+  // budgeted. These values still need empirical recalibration post-deploy,
+  // but should at minimum allow a same-user demo verify to pass.
   const CV_PRIOR = {
-    timing: 0.15,
-    kinematic: 0.18,
-    geometric: 0.12,
-    pressure: 0.10,
+    timing: 0.30,
+    kinematic: 0.50,
+    geometric: 0.25,
+    pressure: 0.20,
   } as const;
 
   const devs: Record<string, number> = {};

@@ -52,14 +52,14 @@ describe('featureSimilarityMahalanobis', () => {
   });
 
   it('attempts within 1 stddev score high', () => {
-    // |diff| = 1*σ, k=2.5 → similarity = 1 - 1/2.5 = 0.6
+    // |diff| = 1*σ, k=3.0 → similarity = 1 - 1/3 = 0.667
     const s = featureSimilarityMahalanobis(100, 110, 10);
-    expect(s).toBeCloseTo(0.6, 2);
+    expect(s).toBeCloseTo(2 / 3, 2);
   });
 
   it('attempts at exactly k*stddev score 0', () => {
-    // |diff| = 2.5*σ exactly → similarity = 0
-    const s = featureSimilarityMahalanobis(100, 100 + 2.5 * 10, 10);
+    // |diff| = k*σ exactly → similarity = 0
+    const s = featureSimilarityMahalanobis(100, 100 + MAHALANOBIS_K * 10, 10);
     expect(s).toBeCloseTo(0, 6);
   });
 
@@ -68,23 +68,24 @@ describe('featureSimilarityMahalanobis', () => {
     expect(s).toBe(0);
   });
 
-  it('zero-stddev uses the magnitude floor (5% of baseline)', () => {
-    // stddev = 0, baseline = 100 → floor = max(MIN_ABS, 0.05 * 100) = 5
-    // |diff| = 5 → 1*floor → 1 - 1/2.5 = 0.6
-    const s = featureSimilarityMahalanobis(100, 105, 0);
-    expect(s).toBeCloseTo(0.6, 2);
+  it('zero-stddev uses the magnitude floor (MIN_REL_STDDEV of baseline)', () => {
+    // stddev = 0, baseline = 100 → floor = max(MIN_ABS, MIN_REL*100) = 100*MIN_REL
+    const floor = 100 * MIN_REL_STDDEV;
+    // |diff| = 1*floor → 1 - 1/k similarity
+    const s = featureSimilarityMahalanobis(100, 100 + floor, 0);
+    expect(s).toBeCloseTo(1 - 1 / MAHALANOBIS_K, 2);
 
-    // Going 2.5*floor away → 0
-    const s2 = featureSimilarityMahalanobis(100, 100 + 2.5 * 5, 0);
+    // Going k*floor away → 0
+    const s2 = featureSimilarityMahalanobis(100, 100 + MAHALANOBIS_K * floor, 0);
     expect(s2).toBeCloseTo(0, 6);
   });
 
-  it('MIN_REL_STDDEV floor matches documented 5%', () => {
-    expect(MIN_REL_STDDEV).toBe(0.05);
+  it('MIN_REL_STDDEV floor matches documented 10%', () => {
+    expect(MIN_REL_STDDEV).toBe(0.10);
   });
 
-  it('MAHALANOBIS_K matches documented 2.5', () => {
-    expect(MAHALANOBIS_K).toBe(2.5);
+  it('MAHALANOBIS_K matches documented 3.0', () => {
+    expect(MAHALANOBIS_K).toBe(3.0);
   });
 
   it('undefined stddev falls back to the legacy relative-error formula', () => {
@@ -99,14 +100,15 @@ describe('featureSimilarityMahalanobis', () => {
   });
 
   it('user with high natural variance gets more tolerance than one with low variance', () => {
-    // Two users both enrolled with baseline=100, both attempt=130.
-    // User A was consistent: σ = 5 → tolerance = 12.5 → diff 30 → sim = 0 (clamped)
-    // User B was noisy:      σ = 20 → tolerance = 50 → diff 30 → sim = 0.4
+    // Two users both enrolled with baseline=100, both attempt=130 (diff=30).
+    // Strict σ=5 gets floored to MIN_REL*100=10 (since MIN_REL_STDDEV=0.10),
+    //   → effective σ=10, tolerance=k*10=30, sim=1-30/30=0
+    // Noisy σ=20 stays as-is, tolerance=k*20=60, sim=1-30/60=0.5
     const strictUser = featureSimilarityMahalanobis(100, 130, 5);
     const noisyUser = featureSimilarityMahalanobis(100, 130, 20);
     expect(noisyUser).toBeGreaterThan(strictUser);
-    expect(strictUser).toBe(0);
-    expect(noisyUser).toBeCloseTo(0.4, 2);
+    expect(strictUser).toBeCloseTo(0, 2);
+    expect(noisyUser).toBeCloseTo(0.5, 2);
   });
 });
 

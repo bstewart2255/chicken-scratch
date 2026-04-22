@@ -24,9 +24,10 @@ export class FeatureVersionMismatchError extends Error {
 
 // Tolerance multiplier for Mahalanobis-style scaling. Attempts within
 // `k * stddev` of the baseline score near 1.0; beyond `k * stddev` the
-// similarity falls off linearly to 0. k = 2.5 means "up to 2.5 standard
-// deviations is considered 'you' with continuous confidence decay."
-const MAHALANOBIS_K = 2.5;
+// similarity falls off linearly to 0. Raised from the initial 2.5 to 3.0
+// after the first prod genuine verify collapsed under the tighter bound —
+// biometric data is noisier than a strict 2.5-sigma gate allows for.
+const MAHALANOBIS_K = 3.0;
 
 // Minimum absolute stddev used in the tolerance floor. Prevents divide-by-
 // zero on features that happened to be identical across all N enrollment
@@ -36,8 +37,10 @@ const MIN_ABS_STDDEV = 1e-3;
 
 // Fractional floor on tolerance relative to baseline magnitude. Ensures
 // even a "zero variance" feature gets at least this fraction of its
-// baseline magnitude as tolerance (5% is a conservative prior).
-const MIN_REL_STDDEV = 0.05;
+// baseline magnitude as tolerance. Raised from 5% to 10% after observing
+// that demo single-sample enrollments were hitting the floor and failing
+// on features whose true per-user variance is higher.
+const MIN_REL_STDDEV = 0.10;
 
 /**
  * Per-user variance-scaled similarity for a single feature.
