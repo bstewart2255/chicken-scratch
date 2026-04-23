@@ -284,6 +284,7 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-7` genuine #2 | Genuine prod (mobile verify, ~40 min after #1) | iPhone touch | 67.68 | 90.74 | 81.52 | circle=78.81 square=84.27 triangle=82.11 house=69.19 smiley=74.43 | **80.39** | 80 | **PASS (margin +0.39)** |
 | `blair-mobile-7` genuine #3 | Genuine prod (mobile verify, ~40 min after #2) | iPhone touch | 64.88 | 93.35 | 81.96 | circle=80.66 square=82.20 triangle=82.45 house=78.25 smiley=70.93 | **81.04** | 80 | **PASS (margin +1.04)** |
 | `blair-mobile-7` forgery #1 | **Daughter forgery** (unfamiliar with target's style) | iPhone touch | 30.22 | 77.65 | 58.68 | circle=68.90 square=73.99 triangle=71.52 house=55.28 smiley=55.00 | **60.56** | 80 | **FAIL (margin -19.44)** ✓ correctly rejected |
+| `blair-mobile-7` genuine #4 | Genuine prod (4th verify, ~20 min after daughter forgery; scored against **pre-2×-stddev baseline**) | iPhone touch | 57.51 | 92.81 | 78.69 | circle=81.64 square=85.07 triangle=80.27 house=79.95 smiley=67.99 | **78.78** | 80 | **FAIL (margin -1.22)** ✗ false reject |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -305,6 +306,12 @@ Applied in `packages/backend/src/services/enrollment.service.ts::computeStdDevs`
 - Threshold stays at 80 for now. Once post-tuning genuine lands where modeled, threshold can rise toward 85 (FIDO-aligned) in a follow-up.
 
 **Rollback plan**: if post-deploy data shows genuine overshooting (>95) or forgery creeping above 70, revert scale to 1.5 or 1.0. One-line change.
+
+**Post-ship data point reinforcing the fix (attempt #5 on `blair-mobile-7`)**: 20 min after the 2× stddev commit landed, user did another genuine verify on the SAME pre-fix baseline (stddevs weren't recomputed — baseline was built before the scale constant existed). Attempt scored **78.78 — FAILED threshold 80**. Timing bucket collapsed from previous ~80 to **44.28** while DTW remained stable at 92.81 and shapes all passed normally. 36-point swing on timing is a concrete demonstration of within-user test-time variance that enrollment-derived σ cannot anticipate. Back-of-envelope: under 2× σ that same attempt would have scored ~82-83 (timing bucket 44 → ~65 because features that sit *just outside* 1× tolerance move into *partial credit* under 2× tolerance).
+
+Updated genuine distribution (N=4, all pre-fix baseline): mean 80.37, σ 1.06, min **78.78** (below threshold), max 81.28. False-reject rate = 25% on this small sample. Extremely urgent to validate the fix against a re-enrolled baseline.
+
+**Next step**: user re-enrolls under a new email (the existing baseline is pre-fix; stored stddevs don't retroactively scale). Post-re-enrollment distribution from 3+ genuine attempts + 1-3 daughter informed-forgery attempts will confirm whether the 2× fix moves genuine into the expected 87-90 band while keeping forgery <75.
 
 **Devices tested so far**:
 
