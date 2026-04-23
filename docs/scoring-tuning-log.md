@@ -279,9 +279,18 @@ Real-user genuine single data point: 88.29.
 | Attempt | Type | Device | Feature | DTW | Fused sig | Shapes (c/sq/tri/h/sm) | Final | Threshold | Auth |
 |---|---|---|---|---|---|---|---|---|---|
 | Priors-bumped | Genuine prod (1st) | macOS trackpad | 66.17 | 92.71 | 82.09 | 89.84/83.79/92.47/82.43/81.19 | **83.25** | 80 | **PASS** |
-| `blair-mobile-7@...` | Genuine prod (mobile enroll → mobile verify via forgot-password QR handoff) | iPhone touch | — | — | — | — | — | 80 | **PASS** |
+| `blair-mobile-7` genuine #1 | Genuine prod (mobile enroll → mobile verify, in-session) | iPhone touch | 65.55 | 92.27 | 81.58 | circle=82.84 square=89.49 triangle=91.92 house=69.44 smiley=69.25 | **81.28** | 80 | **PASS (margin +1.28)** |
+| `blair-mobile-7` genuine #2 | Genuine prod (mobile verify, ~40 min after #1) | iPhone touch | 67.68 | 90.74 | 81.52 | circle=78.81 square=84.27 triangle=82.11 house=69.19 smiley=74.43 | **80.39** | 80 | **PASS (margin +0.39)** |
 
-Last row: first end-to-end confirmation of the cross-device recovery flow (Fix B, commit 7379380). User signed up on desktop → chose "Enroll on mobile" → scanned QR, enrolled on iPhone with finger → later hit forgot-password on desktop → saw pre-flight wrong-device screen → clicked "Verify with your phone" → second QR → completed verify on iPhone → desktop auto-advanced to password-reset. Flow works; specific scores not logged because the pilot focus of this attempt was infrastructure, not calibration. Future attempts on this user should capture scores for distribution analysis.
+Last two rows: both iPhone-touch genuine verifies for `blair-mobile-7` account (first real mobile-enrolled + mobile-verified calibration data). Observations from N=2:
+
+- **Genuine mean 80.84, stddev 0.63, min 80.39** — tight window but grazing the threshold. Margin of +0.39 on attempt 2 means a third attempt with any natural variance dip would fail a genuine user.
+- **Kinematic is noisy across attempts** (32.38 → 46.21, +14 points). Within-user variance on kinematic is high — real stddev on this bucket alone should probably be 2–3× what enrollment measured.
+- **Shapes drove the score delta** (triangle -10, square -5, circle -4 between attempts). Shape biometric scoring against CV-prior-derived stddevs (shapes only collect 1 sample) may be less stable than signature's real-variance path.
+- **House and smiley consistently score ~69** across both attempts — that's the lower cluster. triangle/square/circle cluster ~80-90. Drawings (house/smiley) are harder to reproduce than geometric shapes, confirming the earlier hypothesis. Possible fix: loosen CV priors for drawings specifically, or weight drawings less in the shape aggregate.
+- **DTW still carrying the score** — stable at 91-92 across both attempts; feature score alone would fail.
+
+Need N ≥ 3 before proposing specific priors changes. If attempt 3 continues the pattern (final 79-82 range), the fix is clear: multiply computed stddevs by `REAL_STDDEV_SCALE ≈ 2.0` per the open-questions section, or drop threshold to 75 temporarily.
 
 **Devices tested so far**:
 
