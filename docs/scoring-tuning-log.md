@@ -18,6 +18,7 @@ Running record of scoring-system changes, calibration decisions, and the empiric
 | `MIN_REL_STDDEV` | `0.10` | Bumped from 0.05 (f542219). Small-magnitude features were hitting floor. |
 | `MIN_ABS_STDDEV` | `1e-3` | Unchanged; divide-by-zero guard |
 | `DTW_FUSION_WEIGHT` | `0.6` | Sum-rule prior from Fierrez-Aguilar 2005. Untuned empirically. |
+| `REAL_STDDEV_SCALE` | `2.0` | **NEW** — multiplies computed stddevs to close the enrollment/test-time variance gap. Applied in `computeStdDevs` only. Shipped after N=3 genuine attempts clustered at mean 80.9 σ 0.44 (thin margin) and daughter forgery sat at 60.6 (20-pt gap) — data shows ample headroom to widen genuine envelope. |
 | `AUTH_SCORE_DEFAULT` | `80` | **Temporarily relaxed** from 85. Calibration safety valve. |
 | `SIGNATURE_MIN_THRESHOLD` | `65` | **Temporarily relaxed** from 75. |
 | `SHAPE_MIN_THRESHOLD` | `35` | **Temporarily relaxed** from 40. |
@@ -281,16 +282,29 @@ Real-user genuine single data point: 88.29.
 | Priors-bumped | Genuine prod (1st) | macOS trackpad | 66.17 | 92.71 | 82.09 | 89.84/83.79/92.47/82.43/81.19 | **83.25** | 80 | **PASS** |
 | `blair-mobile-7` genuine #1 | Genuine prod (mobile enroll → mobile verify, in-session) | iPhone touch | 65.55 | 92.27 | 81.58 | circle=82.84 square=89.49 triangle=91.92 house=69.44 smiley=69.25 | **81.28** | 80 | **PASS (margin +1.28)** |
 | `blair-mobile-7` genuine #2 | Genuine prod (mobile verify, ~40 min after #1) | iPhone touch | 67.68 | 90.74 | 81.52 | circle=78.81 square=84.27 triangle=82.11 house=69.19 smiley=74.43 | **80.39** | 80 | **PASS (margin +0.39)** |
+| `blair-mobile-7` genuine #3 | Genuine prod (mobile verify, ~40 min after #2) | iPhone touch | 64.88 | 93.35 | 81.96 | circle=80.66 square=82.20 triangle=82.45 house=78.25 smiley=70.93 | **81.04** | 80 | **PASS (margin +1.04)** |
+| `blair-mobile-7` forgery #1 | **Daughter forgery** (unfamiliar with target's style) | iPhone touch | 30.22 | 77.65 | 58.68 | circle=68.90 square=73.99 triangle=71.52 house=55.28 smiley=55.00 | **60.56** | 80 | **FAIL (margin -19.44)** ✓ correctly rejected |
 
-Last two rows: both iPhone-touch genuine verifies for `blair-mobile-7` account (first real mobile-enrolled + mobile-verified calibration data). Observations from N=2:
+Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
-- **Genuine mean 80.84, stddev 0.63, min 80.39** — tight window but grazing the threshold. Margin of +0.39 on attempt 2 means a third attempt with any natural variance dip would fail a genuine user.
-- **Kinematic is noisy across attempts** (32.38 → 46.21, +14 points). Within-user variance on kinematic is high — real stddev on this bucket alone should probably be 2–3× what enrollment measured.
-- **Shapes drove the score delta** (triangle -10, square -5, circle -4 between attempts). Shape biometric scoring against CV-prior-derived stddevs (shapes only collect 1 sample) may be less stable than signature's real-variance path.
-- **House and smiley consistently score ~69** across both attempts — that's the lower cluster. triangle/square/circle cluster ~80-90. Drawings (house/smiley) are harder to reproduce than geometric shapes, confirming the earlier hypothesis. Possible fix: loosen CV priors for drawings specifically, or weight drawings less in the shape aggregate.
-- **DTW still carrying the score** — stable at 91-92 across both attempts; feature score alone would fail.
+- **Genuine distribution extremely tight and grazing the threshold**: mean 80.90, σ 0.44, range 80.39–81.28. At 2σ, lower bound is 80.02 — roughly 5% false-reject rate if distribution holds. Unacceptable for a recovery product.
+- **Daughter forgery landed at 60.56**, margin -19.44 below threshold. Feature=30.22 (timing=20.32 dominant drop), DTW=77.65 (DTW wasn't primary catcher). Timing was the #1 adversarial signal — same finding as the earlier pre-v3 wife-forgery analysis.
+- **Forgery simulator (50 trials each level) on same user**: random FAR 0%, unskilled FAR 0%, skilled FAR 0%, skilled max score 48.84. Automated forgery has zero overlap with genuine.
+- **Genuine-vs-forgery gap**: 20.3 points real (daughter), 32 points simulator-skilled. Plenty of room to widen the genuine tolerance without leaking forgery.
 
-Need N ≥ 3 before proposing specific priors changes. If attempt 3 continues the pattern (final 79-82 range), the fix is clear: multiply computed stddevs by `REAL_STDDEV_SCALE ≈ 2.0` per the open-questions section, or drop threshold to 75 temporarily.
+### Decision: apply `REAL_STDDEV_SCALE = 2.0`
+
+Literature-backed fix (Plamondon-Djioua lognormal, Martinez-Diaz mobile DSV): enrollment-session variance understates test-time variance by 1.5-2×. Multiplying computed stddevs by 2.0 in `computeStdDevs` closes the gap.
+
+Applied in `packages/backend/src/services/enrollment.service.ts::computeStdDevs`. Declared as `THRESHOLDS.REAL_STDDEV_SCALE`. Scaling applies only to the multi-sample path — `getDefaultStdDevs` already uses CV priors tuned for test-time variance, so it's not double-scaled.
+
+**Expected effect (modeled, needs post-deploy validation)**:
+- Genuine final: 80.90 → ~87-88 (feature score is the bucket-bottom pulling down; doubling σ unclamps many features that were sitting just outside their tolerance envelope)
+- Daughter forgery: 60.56 → ~65 (most features still clamped at 0 regardless — they're way beyond 2×σ, not 1-2×σ)
+- Genuine-forgery gap: 20 → 22-23 (widens because genuine was bounded by tolerance, forgery was bounded by distance)
+- Threshold stays at 80 for now. Once post-tuning genuine lands where modeled, threshold can rise toward 85 (FIDO-aligned) in a follow-up.
+
+**Rollback plan**: if post-deploy data shows genuine overshooting (>95) or forgery creeping above 70, revert scale to 1.5 or 1.0. One-line change.
 
 **Devices tested so far**:
 

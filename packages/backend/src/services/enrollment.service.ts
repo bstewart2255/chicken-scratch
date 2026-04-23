@@ -124,8 +124,16 @@ function averageMLFeatures(mlSets: MLFeatureVector[]): MLFeatureVector {
  * adding a new feature in the extractor automatically shows up here without
  * a secondary edit (v3 lesson: the old hand-enumerated default-stddev map
  * drifted out of sync with the real interfaces).
+ *
+ * All computed stddevs are scaled by THRESHOLDS.REAL_STDDEV_SCALE to close
+ * the enrollment-vs-test-time variance gap (users are more consistent in
+ * their 3-in-a-row enrollment than in real verify sessions). Without this
+ * scaling the matcher gates on too-tight tolerance, producing thin genuine
+ * margins — observed as 3 genuine iPhone-touch verifies clustering at
+ * mean 80.90 / σ 0.44 against threshold 80. See thresholds.ts comment.
  */
 function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
+  const scale = THRESHOLDS.REAL_STDDEV_SCALE;
   const devs: Record<string, number> = {};
   const bucketsToAverage: Array<keyof Pick<AllFeatures, 'timing' | 'kinematic' | 'geometric'>> =
     ['timing', 'kinematic', 'geometric'];
@@ -133,7 +141,7 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   for (const bucket of bucketsToAverage) {
     const keys = Object.keys(featureSets[0][bucket]);
     for (const key of keys) {
-      devs[`${bucket}.${key}`] = stddev(
+      devs[`${bucket}.${key}`] = scale * stddev(
         featureSets.map(f => (f[bucket] as unknown as Record<string, number>)[key]),
       );
     }
@@ -142,7 +150,7 @@ function computeStdDevs(featureSets: AllFeatures[]): Record<string, number> {
   if (featureSets.every(f => f.pressure !== null)) {
     const pKeys = Object.keys(featureSets[0].pressure!) as (keyof NonNullable<AllFeatures['pressure']>)[];
     for (const key of pKeys) {
-      devs[`pressure.${String(key)}`] = stddev(featureSets.map(f => f.pressure![key]));
+      devs[`pressure.${String(key)}`] = scale * stddev(featureSets.map(f => f.pressure![key]));
     }
   }
   return devs;

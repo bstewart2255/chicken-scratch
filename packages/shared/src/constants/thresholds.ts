@@ -72,6 +72,29 @@ export const THRESHOLDS = {
   // to feature-only scoring.
   DTW_FUSION_WEIGHT: 0.6,
 
+  // Multiplier applied to per-user stddevs computed at enrollment time,
+  // before they're used by the Mahalanobis matcher.
+  //
+  // Why: users' 3 enrollment samples are captured in a single focused session
+  // (same hand position, same rhythm, same mood). That produces a tight
+  // variance estimate that UNDERESTIMATES their actual verify-time variance
+  // (different time of day, different distraction level, etc.). Plamondon-
+  // Djioua lognormal theory + Martinez-Diaz mobile DSV benchmarks put the
+  // enrollment-to-test-time variance gap around 1.5-2x.
+  //
+  // Empirically set to 2.0 after N=3 genuine verifies for the blair-mobile-7
+  // account all landed in a 0.89-point band at mean 80.90, grazing the 80
+  // threshold. Without this scaler, genuine users face a ~5% false-reject
+  // rate at 2σ; daughter forgery independently landed at 60.56 (20-point
+  // gap) confirming there's ample room to widen the genuine envelope
+  // without leaking forgery. See docs/scoring-tuning-log.md for the full
+  // data + reasoning.
+  //
+  // Applied only in computeStdDevs (multi-sample enrollment path). Does
+  // NOT compound onto getDefaultStdDevs (single-sample demo/shape paths),
+  // which already produce test-time-ish tolerance via CV priors.
+  REAL_STDDEV_SCALE: 2.0,
+
   // Shape scoring
   SIGNATURE_WEIGHT: 0.7,
   SHAPE_WEIGHT: 0.3,
