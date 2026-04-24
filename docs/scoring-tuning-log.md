@@ -287,6 +287,9 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-7` genuine #4 | Genuine prod (4th verify, ~20 min after daughter forgery; scored against **pre-2×-stddev baseline**) | iPhone touch | 57.51 | 92.81 | 78.69 | circle=81.64 square=85.07 triangle=80.27 house=79.95 smiley=67.99 | **78.78** | 80 | **FAIL (margin -1.22)** ✗ false reject |
 | `blair-mobile-9` genuine #1 | Genuine prod (1st verify on **post-2×-stddev + post-pressure-gate baseline**; fresh enrollment 2026-04-24) | iPhone touch | 81.22 | 94.44 | 89.15 | circle=87.75 square=82.93 triangle=89.73 house=81.70 smiley=86.43 | **88.12** | 80 | **PASS (margin +8.12)** ✓ validates 2× fix |
 | `blair-mobile-9` genuine #2 | Genuine prod (2nd verify, ~8 min after #1) | iPhone touch | 85.32 | 92.33 | 89.53 | circle=84.29 square=81.65 triangle=82.75 house=79.44 smiley=84.16 | **87.41** | 80 | **PASS (margin +7.41)** ✓ |
+| `blair-mobile-9` genuine #3 | Genuine prod (3rd verify, ~10 min after #2) | iPhone touch | 79.27 | 93.05 | 87.54 | triangle=86.22 square=84.68 circle=79.79 smiley=75.15 house=82.38 | **85.77** | 80 | **PASS (margin +5.77)** ✓ |
+| `blair-mobile-9` genuine #4 | Genuine prod (4th verify, ~1 min after #3) | iPhone touch | 85.51 | 93.41 | 90.25 | triangle=84.25 square=82.38 house=77.70 circle=81.70 smiley=73.85 | **87.17** | 80 | **PASS (margin +7.17)** ✓ |
+| `blair-mobile-9` genuine #5 | Genuine prod (5th verify, ~1 min after #4) | iPhone touch | 82.59 | 92.88 | 88.76 | house=75.09 circle=79.65 smiley=69.73 square=76.61 triangle=87.79 | **85.46** | 80 | **PASS (margin +5.46)** ✓ |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -343,6 +346,40 @@ Second verify 8 min after #1 scored 87.41. Running distribution: mean 87.77, σ 
 Kinematic bucket ran **76 → 94** between the two attempts (18-point within-user swing on consecutive captures 8 min apart). Under pre-fix constants that same natural variance caused kinematic to land at ~35 either way; now both attempts land comfortably. That's the 2× σ envelope absorbing real per-user variance as designed. Confirms the fix handles within-user noise, not just a one-off lucky capture.
 
 Feature-score delta (#1: 81.22 vs #2: 85.32) comes from the kinematic swing, partially offset by a slight DTW dip (94.44 → 92.33). Net signature score is almost identical between attempts — fusion is doing its job of averaging out bucket-level noise.
+
+#### Post-fix update, N=5 (3 more genuines added)
+
+Running genuine distribution on blair-mobile-9 after 5 consecutive verifies over ~20 min:
+
+| | Pre-fix (blair-mobile-7 N=3) | Post-fix (blair-mobile-9 N=5) |
+|---|---|---|
+| Mean | 80.90 | **86.79** |
+| σ | 0.44 | 1.01 |
+| Min | 80.39 | 85.46 |
+| Min margin | +0.39 | **+5.46** |
+| Pass rate | 3/3 (later 4/5, attempt #5 failed) | 5/5 |
+
+σ widening from 0.44 → 1.01 is healthy — pre-fix's tight cluster was clustered *at threshold* (pathological), post-fix's wider distribution is *well above threshold*. 3σ lower bound 83.76, still passes.
+
+Per-bucket ranges across N=5:
+- DTW: 92.33–94.44 (2.1pt — extremely stable)
+- Timing: 84.98–91.79 (6.8pt — healthy mid-band)
+- Feature: 79.27–85.51 (6.2pt)
+- **Kinematic: 73.99–94.15 (20pt — wide but all in healthy band)**
+
+Kinematic being the widest-variance bucket is expected (velocity/acceleration naturally fluctuate session-to-session). Pre-fix: same variance caused kinematic to land 30-45. Post-fix: 74-94. The 2× envelope is absorbing real within-user noise exactly as modeled.
+
+**Shape-biometric drift across repeated attempts** (new observation, worth flagging):
+
+| Shape | #1 | #2 | #3 | #4 | #5 |
+|---|---|---|---|---|---|
+| smiley | 86.43 | 84.16 | 75.15 | 73.85 | 69.73 |
+| house | 81.70 | 79.44 | 82.38 | 77.70 | 75.09 |
+| triangle | 89.73 | 82.75 | 86.22 | 84.25 | 87.79 |
+| square | 82.93 | 81.65 | 84.68 | 82.38 | 76.61 |
+| circle | 87.75 | 84.29 | 79.79 | 81.70 | 79.65 |
+
+Drawings (smiley, house) show clear downward drift across repeated same-session attempts — not a random fluctuation. Triangle/square/circle stay stable. Hypothesis: single-sample shape baselines use CV-prior stddevs (not real computed variance) and those priors may be too tight for drawings specifically — or drawings simply have more within-user session-to-session variance than geometric shapes. All still clear the 35 shape-min floor so not blocking; worth investigating once we have N=10+ data across different sessions (not consecutive).
 
 **Devices tested so far**:
 
