@@ -286,6 +286,7 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-7` forgery #1 | **Daughter forgery** (unfamiliar with target's style) | iPhone touch | 30.22 | 77.65 | 58.68 | circle=68.90 square=73.99 triangle=71.52 house=55.28 smiley=55.00 | **60.56** | 80 | **FAIL (margin -19.44)** ✓ correctly rejected |
 | `blair-mobile-7` genuine #4 | Genuine prod (4th verify, ~20 min after daughter forgery; scored against **pre-2×-stddev baseline**) | iPhone touch | 57.51 | 92.81 | 78.69 | circle=81.64 square=85.07 triangle=80.27 house=79.95 smiley=67.99 | **78.78** | 80 | **FAIL (margin -1.22)** ✗ false reject |
 | `blair-mobile-9` genuine #1 | Genuine prod (1st verify on **post-2×-stddev + post-pressure-gate baseline**; fresh enrollment 2026-04-24) | iPhone touch | 81.22 | 94.44 | 89.15 | circle=87.75 square=82.93 triangle=89.73 house=81.70 smiley=86.43 | **88.12** | 80 | **PASS (margin +8.12)** ✓ validates 2× fix |
+| `blair-mobile-9` genuine #2 | Genuine prod (2nd verify, ~8 min after #1) | iPhone touch | 85.32 | 92.33 | 89.53 | circle=84.29 square=81.65 triangle=82.75 house=79.44 smiley=84.16 | **87.41** | 80 | **PASS (margin +7.41)** ✓ |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -334,6 +335,14 @@ Kinematic moved exactly as modeled — the 2× tolerance envelope unclamped feat
 Still need distribution (N≥3) and daughter informed-forgery data to confirm:
 - Genuine σ stays wide enough that the 88 isn't an outlier
 - Forgery rejection holds — daughter's expected score range post-fix: 65-70. If she clears 75+, we over-tuned.
+
+#### Post-fix update, N=2 (2nd genuine verify)
+
+Second verify 8 min after #1 scored 87.41. Running distribution: mean 87.77, σ 0.36, min 87.41. Distribution is tightening around a healthy center rather than clustering at threshold like pre-fix.
+
+Kinematic bucket ran **76 → 94** between the two attempts (18-point within-user swing on consecutive captures 8 min apart). Under pre-fix constants that same natural variance caused kinematic to land at ~35 either way; now both attempts land comfortably. That's the 2× σ envelope absorbing real per-user variance as designed. Confirms the fix handles within-user noise, not just a one-off lucky capture.
+
+Feature-score delta (#1: 81.22 vs #2: 85.32) comes from the kinematic swing, partially offset by a slight DTW dip (94.44 → 92.33). Net signature score is almost identical between attempts — fusion is doing its job of averaging out bucket-level noise.
 
 **Devices tested so far**:
 
