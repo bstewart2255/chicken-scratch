@@ -285,6 +285,7 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-7` genuine #3 | Genuine prod (mobile verify, ~40 min after #2) | iPhone touch | 64.88 | 93.35 | 81.96 | circle=80.66 square=82.20 triangle=82.45 house=78.25 smiley=70.93 | **81.04** | 80 | **PASS (margin +1.04)** |
 | `blair-mobile-7` forgery #1 | **Daughter forgery** (unfamiliar with target's style) | iPhone touch | 30.22 | 77.65 | 58.68 | circle=68.90 square=73.99 triangle=71.52 house=55.28 smiley=55.00 | **60.56** | 80 | **FAIL (margin -19.44)** ✓ correctly rejected |
 | `blair-mobile-7` genuine #4 | Genuine prod (4th verify, ~20 min after daughter forgery; scored against **pre-2×-stddev baseline**) | iPhone touch | 57.51 | 92.81 | 78.69 | circle=81.64 square=85.07 triangle=80.27 house=79.95 smiley=67.99 | **78.78** | 80 | **FAIL (margin -1.22)** ✗ false reject |
+| `blair-mobile-9` genuine #1 | Genuine prod (1st verify on **post-2×-stddev + post-pressure-gate baseline**; fresh enrollment 2026-04-24) | iPhone touch | 81.22 | 94.44 | 89.15 | circle=87.75 square=82.93 triangle=89.73 house=81.70 smiley=86.43 | **88.12** | 80 | **PASS (margin +8.12)** ✓ validates 2× fix |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -312,6 +313,27 @@ Applied in `packages/backend/src/services/enrollment.service.ts::computeStdDevs`
 Updated genuine distribution (N=4, all pre-fix baseline): mean 80.37, σ 1.06, min **78.78** (below threshold), max 81.28. False-reject rate = 25% on this small sample. Extremely urgent to validate the fix against a re-enrolled baseline.
 
 **Next step**: user re-enrolls under a new email (the existing baseline is pre-fix; stored stddevs don't retroactively scale). Post-re-enrollment distribution from 3+ genuine attempts + 1-3 daughter informed-forgery attempts will confirm whether the 2× fix moves genuine into the expected 87-90 band while keeping forgery <75.
+
+### Post-fix validation (blair-mobile-9, N=1)
+
+Fresh enrollment on iPhone touch under the combined fixes (2× stddev scale + pressure variance gate). First verify:
+
+| Bucket | Pre-fix (blair-mobile-7 avg) | Post-fix (blair-mobile-9 #1) | Δ |
+|---|---|---|---|
+| Final | 80.90 | **88.12** | **+7.22** |
+| Feature | 66.04 | 81.22 | +15.18 |
+| Kinematic | 37.49 | **76.19** | **+38.70** |
+| Timing | 80.61 | 91.19 | +10.58 |
+| Geometric | 76.97 | 79.04 | +2.07 |
+| DTW | 92.12 | 94.44 | +2.32 (stable) |
+| Pressure | 100 (phantom) | null (correctly skipped) | — |
+| Avg shape | 79.08 | 85.71 | +6.63 |
+
+Kinematic moved exactly as modeled — the 2× tolerance envelope unclamped features that were scoring 0 under the tight baseline. The pressure bucket correctly went null on iPhone touch (no flat-default phantom contribution anymore).
+
+Still need distribution (N≥3) and daughter informed-forgery data to confirm:
+- Genuine σ stays wide enough that the 88 isn't an outlier
+- Forgery rejection holds — daughter's expected score range post-fix: 65-70. If she clears 75+, we over-tuned.
 
 **Devices tested so far**:
 
