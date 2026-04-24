@@ -32,6 +32,15 @@ export const THRESHOLDS = {
   SPEED_ANOMALY_THRESHOLD: 0.05,
   PRESSURE_ANOMALY_THRESHOLD: 0.5,
 
+  // Minimum stddev of per-point pressure values to consider pressure data
+  // "real" rather than a browser-reported flat default. Trackpad + most
+  // finger-touch on iOS Safari reports a constant ~0.5 pressure regardless
+  // of the user — that's not biometric signal and shouldn't flow into the
+  // pressure bucket's matching (where it would score 100 trivially and
+  // reward the user 15% weight for a no-op). Apple Pencil / Wacom vary
+  // by 0.1–0.3 stddev across a stroke; this threshold cleanly separates.
+  MIN_PRESSURE_VARIANCE: 0.02,
+
   // Feature extraction
   // Bumped to 3.0.0: dropped pressureRange/pauseDetection/spatialEfficiency,
   // demoted security features to diagnosticFlags, added kinematic bucket

@@ -7,6 +7,7 @@ import { SignatureCanvas } from '../components/SignatureCanvas';
 import { ShapeCanvas } from '../components/ShapeCanvas';
 import { useDeviceCapabilities } from '../hooks/useDeviceCapabilities';
 import { buildSignatureData } from '../lib/stroke-collector';
+import type { TiltCapture } from '../lib/tilt-capture';
 import * as api from '../api/client';
 
 type MobileStep = 'loading' | 'signature' | 'shape' | 'submitting' | 'done' | 'error';
@@ -42,6 +43,7 @@ export function MobileSession() {
   const [loading, setLoading] = useState(false);
   const [canvasHeight, setCanvasHeight] = useState(250);
   const padRef = useRef<SignaturePad | null>(null);
+  const tiltRef = useRef<TiltCapture | null>(null);
   const deviceCaps = useDeviceCapabilities();
 
   // Timing tracking
@@ -109,7 +111,7 @@ export function MobileSession() {
     }
 
     const canvas = (padRef.current as any).canvas;
-    const data = buildSignatureData(padRef.current, canvas, deviceCaps);
+    const data = buildSignatureData(padRef.current, canvas, deviceCaps, tiltRef.current ?? undefined);
     setLoading(true);
     setError('');
 
@@ -148,7 +150,7 @@ export function MobileSession() {
     }
 
     const canvas = (padRef.current as any).canvas;
-    const data = buildSignatureData(padRef.current, canvas, deviceCaps);
+    const data = buildSignatureData(padRef.current, canvas, deviceCaps, tiltRef.current ?? undefined);
     const shapeType = shapeOrder[shapeIndex] as ChallengeItemType;
 
     setLoading(true);
@@ -194,7 +196,7 @@ export function MobileSession() {
     }
 
     const canvas = (padRef.current as any).canvas;
-    const data = buildSignatureData(padRef.current, canvas, deviceCaps);
+    const data = buildSignatureData(padRef.current, canvas, deviceCaps, tiltRef.current ?? undefined);
     recordStepDuration('signature');
     setSignatureData(data);
     setShapeIndex(0);
@@ -212,7 +214,7 @@ export function MobileSession() {
     }
 
     const canvas = (padRef.current as any).canvas;
-    const data = buildSignatureData(padRef.current, canvas, deviceCaps);
+    const data = buildSignatureData(padRef.current, canvas, deviceCaps, tiltRef.current ?? undefined);
     const shapeType = shapeOrder[shapeIndex] as ChallengeItemType;
     const newShapeData: ShapeData = { shapeType, signatureData: data };
     const updatedShapes = [...shapeDataList, newShapeData];
@@ -307,12 +309,13 @@ export function MobileSession() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <p style={{ color: '#333', marginBottom: 8, fontSize: 15 }}>{message}</p>
 
-          {step === 'signature' && <SignatureCanvas padRef={padRef} height={canvasHeight} />}
+          {step === 'signature' && <SignatureCanvas padRef={padRef} tiltRef={tiltRef} height={canvasHeight} />}
           {step === 'shape' && (
             <ShapeCanvas
               key={shapeOrder[shapeIndex]}
               shapeType={shapeOrder[shapeIndex] as ChallengeItemType}
               padRef={padRef}
+              tiltRef={tiltRef}
               height={canvasHeight}
             />
           )}

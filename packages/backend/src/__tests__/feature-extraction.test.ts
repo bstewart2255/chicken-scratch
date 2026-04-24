@@ -67,18 +67,38 @@ describe('extractAllFeatures (v3 orchestrator)', () => {
     expect((f.geometric as unknown as Record<string, unknown>).spatialEfficiency).toBeUndefined();
   });
 
-  it('populates pressure bucket only when at least one point has pressure > 0', () => {
+  it('populates pressure bucket only when pressure has real variance (not flat defaults)', () => {
+    // Pressure sweep — simulates a real stylus where pressure ramps up/down
+    // across the stroke. Must be non-flat to pass the variance gate
+    // (MIN_PRESSURE_VARIANCE = 0.02 in thresholds) — flat values are
+    // browser-reported defaults, not biometric signal.
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i < 20; i++) {
+      const pressure = 0.3 + 0.4 * Math.sin(i * Math.PI / 19);  // ramps 0.3 → 0.7 → 0.3
+      pts.push(mkPoint(10 + i * 10, 50, 1000 + i * 10, pressure));
+    }
+    const sig = mkSig([mkStroke(pts)]);
+    const f = extractAllFeatures(sig);
+
+    expect(f.pressure).not.toBeNull();
+    expect(f.pressure!.avgPressure).toBeGreaterThan(0.3);
+    expect(f.pressure!.avgPressure).toBeLessThan(0.7);
+    // pressureRange removed in v3
+    expect((f.pressure as unknown as Record<string, unknown>).pressureRange).toBeUndefined();
+  });
+
+  it('leaves pressure bucket null when all points have the SAME pressure (phantom trackpad default)', () => {
+    // Old bug: this would trip `some pressure > 0` and populate the pressure
+    // bucket with a flat value that matches every other flat-default capture
+    // for free — rewarding the user 15% weight for a no-op. The variance
+    // gate fixes it.
     const pts: StrokePoint[] = [];
     for (let i = 0; i < 20; i++) {
       pts.push(mkPoint(10 + i * 10, 50, 1000 + i * 10, 0.5));
     }
     const sig = mkSig([mkStroke(pts)]);
     const f = extractAllFeatures(sig);
-
-    expect(f.pressure).not.toBeNull();
-    expect(f.pressure!.avgPressure).toBeCloseTo(0.5);
-    // pressureRange removed in v3
-    expect((f.pressure as unknown as Record<string, unknown>).pressureRange).toBeUndefined();
+    expect(f.pressure).toBeNull();
   });
 });
 

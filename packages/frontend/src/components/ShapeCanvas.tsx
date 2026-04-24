@@ -1,6 +1,7 @@
 import { useSignaturePad } from '../hooks/useSignaturePad';
 import type SignaturePad from 'signature_pad';
 import type { ChallengeItemType } from '@chicken-scratch/shared';
+import type { TiltCapture } from '../lib/tilt-capture';
 
 const CHALLENGE_LABELS: Record<ChallengeItemType, string> = {
   circle: 'Draw a Circle',
@@ -13,11 +14,12 @@ const CHALLENGE_LABELS: Record<ChallengeItemType, string> = {
 interface Props {
   shapeType: ChallengeItemType;
   padRef?: React.MutableRefObject<SignaturePad | null>;
+  tiltRef?: React.MutableRefObject<TiltCapture | null>;
   height?: number;
 }
 
-export function ShapeCanvas({ shapeType, padRef: externalPadRef, height }: Props) {
-  const { canvasRef, clear } = useSignaturePad(externalPadRef);
+export function ShapeCanvas({ shapeType, padRef: externalPadRef, tiltRef: externalTiltRef, height }: Props) {
+  const { canvasRef, clear } = useSignaturePad(externalPadRef, externalTiltRef);
 
   return (
     <div style={{ border: '2px solid #ccc', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>

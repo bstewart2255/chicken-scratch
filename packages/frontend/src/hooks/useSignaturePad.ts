@@ -1,9 +1,16 @@
 import { useRef, useEffect, useCallback } from 'react';
 import SignaturePad from 'signature_pad';
+import { TiltCapture } from '../lib/tilt-capture.js';
 
-export function useSignaturePad(externalPadRef?: React.MutableRefObject<SignaturePad | null>) {
+export function useSignaturePad(
+  externalPadRef?: React.MutableRefObject<SignaturePad | null>,
+  externalTiltRef?: React.MutableRefObject<TiltCapture | null>,
+) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePad | null>(null);
+  // Side-channel tilt buffer for stylus users (signature_pad drops tilt data).
+  // Empty for mouse/touch, populated for pen pointers.
+  const tiltCaptureRef = useRef<TiltCapture | null>(null);
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -50,6 +57,13 @@ export function useSignaturePad(externalPadRef?: React.MutableRefObject<Signatur
     });
     padRef.current = pad;
 
+    // Start tilt capture. No-op cost on mouse/touch; real data on stylus.
+    const tilt = new TiltCapture(canvas);
+    tiltCaptureRef.current = tilt;
+    if (externalTiltRef) {
+      externalTiltRef.current = tilt;
+    }
+
     // Sync external ref immediately after pad creation
     if (externalPadRef) {
       externalPadRef.current = pad;
@@ -77,19 +91,25 @@ export function useSignaturePad(externalPadRef?: React.MutableRefObject<Signatur
       if (externalPadRef) {
         externalPadRef.current = null;
       }
+      tiltCaptureRef.current?.destroy();
+      tiltCaptureRef.current = null;
+      if (externalTiltRef) {
+        externalTiltRef.current = null;
+      }
       document.removeEventListener('touchmove', preventScroll);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, [resizeCanvas, externalPadRef]);
+  }, [resizeCanvas, externalPadRef, externalTiltRef]);
 
   const clear = useCallback(() => {
     padRef.current?.clear();
+    tiltCaptureRef.current?.clear();
   }, []);
 
   const isEmpty = useCallback(() => {
     return padRef.current?.isEmpty() ?? true;
   }, []);
 
-  return { canvasRef, padRef, clear, isEmpty };
+  return { canvasRef, padRef, tiltCaptureRef, clear, isEmpty };
 }

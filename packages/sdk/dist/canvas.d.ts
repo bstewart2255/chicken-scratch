@@ -3,7 +3,10 @@ export declare class DrawingCanvas {
     private canvas;
     private pad;
     private scrollHandler;
+    private tiltListener;
+    private tiltEntries;
     constructor(container: HTMLElement);
+    private findTilt;
     private scaleCanvas;
     isEmpty(): boolean;
     clear(): void;
