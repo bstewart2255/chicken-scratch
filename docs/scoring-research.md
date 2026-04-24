@@ -213,6 +213,45 @@ Literature consensus (Fierrez-Aguilar et al., Martinez-Diaz et al., and more rec
 
 ---
 
+## 8. Anti-Forgery Design Notes
+
+Synthesized from two independent Claude review passes on the auth & tuning logic (2026-04-23). These points aren't from the peer-reviewed literature the rest of this doc cites — they're design principles that fell out of adversarial analysis of the existing code. Capturing here so they don't get lost between sessions.
+
+### 8.1 Per-user motor-constraint residuals (vs population-wide gates)
+
+**The trap**: motor constraints like the 2/3 power law (Lacquaniti et al. — natural human drawing speed scales with curvature^(-1/3)) and isochrony (larger movements don't take proportionally longer for the same person) are real, strong anti-forgery signals. The naive implementation is a population-wide pass/fail: "does this attempt look like natural human motion?" That traces aren't natural, bots aren't natural — but neither is an elderly user, a Parkinson's patient, a user writing awkwardly with their off hand, or anyone with a tremor. Population-wide gates lock out populations we want to serve.
+
+**The better framing**: treat the motor-constraint residual as a *per-user* signal. Compute the user's typical 2/3-law residual at enrollment (how much do they break the law, which direction, by how much) and store it in the baseline. At verify time, compare the attempt's residual to the user's baseline residual — not to a population norm.
+
+- A user with tremor has a consistent tremor signature; a forger tracing carefully will violate 2/3 *differently* from however that user naturally violates it
+- Elderly / impaired users keep their baseline; their "not-natural" motion is natural-to-them
+- A forger studying a video still can't reproduce the user's specific micro-motor signature — the attack surface is motor-unit firing patterns, which aren't trainable from observation
+- Implementation: 2/3-residual slots into the kinematic bucket as a new feature that follows the same Mahalanobis per-user-σ scaling as the rest of the matcher. No new scoring layer required.
+
+**When to layer a population-wide gate on top**: only for extreme non-human patterns (bot / replay attacks where the trajectory has the kinematic profile of a mouse, not a hand). That's a different threat model from skilled human forgery and should be a separate vetoing signal, not mixed into the scoring.
+
+### 8.2 Adaptive template update — attack surface & required guards
+
+**Why adaptation matters**: users drift (aging, injury, medication, new device, just-had-coffee). Without template refresh, the longest-tenured users have the highest FRR. Standard fix is exponential moving average: blend each successful verify's features into the stored baseline with small weight.
+
+**The attack it opens**: once the baseline adapts from verify attempts, a forger who squeaks through *once* starts pulling the baseline toward themselves. On each subsequent successful forgery, the user's margin on their own signature shrinks. Over N successful attacks, baseline can drift enough that the forger's natural style is in the tolerance envelope.
+
+**Minimum-safe design for any adaptive-template PR**:
+
+1. **High-confidence band only** — adapt only from verifies where score ≥ ~90 (or some threshold well above the base pass cutoff). Borderline passes don't move the baseline. A forger who scrapes by at 82 is already at the threshold; letting that sample influence future verdicts compounds the risk.
+
+2. **Secondary continuity signal required** — before adapting, require at least one of: device-fingerprint continuity with a recent successful verify on this device, session-token continuity, or a recent successful verify on the user's *other* enrolled device class. Forger who has the signature data but not the user's active session context can't satisfy the secondary signal.
+
+3. **Capped per-verify adaptation weight** — EMA with α ≤ 0.05 (one adapted sample moves baseline ≤ 5%). The right α is a function of expected attack rate: if forger success rate is 1 in 1000, α = 0.05 gives ~50 forged samples to meaningfully move baseline — a lifetime of attacks; if 1 in 100, α should be lower. Tie to threat model, don't default.
+
+4. **Variance-inflation rejection** — a forger pulling baseline toward themselves will systematically *broaden* σ before the mean recenters. Reject adaptation samples that would push per-feature σ above a population-derived ceiling. This catches adaptation drift before it completes.
+
+**What NOT to adapt**: the per-feature σ itself via simple EMA is risky because it creates a feedback loop (wider σ → more attempts pass → feed back to σ). Adapt the MEAN with EMA; keep σ computed from a fixed recent window of samples (e.g. most recent 10) with a hard sanity cap.
+
+**Design deferred for now** — the 2× REAL_STDDEV_SCALE fix reduces the urgency by widening the genuine envelope without opening this attack surface. Template adaptation becomes necessary when long-term drift (measured in months of pilot data) starts showing in the genuine score distribution.
+
+---
+
 ## Key References
 
 - Fierrez-Aguilar, Krawczyk, Ortega-Garcia, Bigun — "An On-Line Signature Verification System Based on Fusion of Local and Global Information" (ICB 2005) — canonical global feature set, Mahalanobis scoring, sum-rule fusion.
