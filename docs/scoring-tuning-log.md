@@ -290,6 +290,7 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-9` genuine #3 | Genuine prod (3rd verify, ~10 min after #2) | iPhone touch | 79.27 | 93.05 | 87.54 | triangle=86.22 square=84.68 circle=79.79 smiley=75.15 house=82.38 | **85.77** | 80 | **PASS (margin +5.77)** ✓ |
 | `blair-mobile-9` genuine #4 | Genuine prod (4th verify, ~1 min after #3) | iPhone touch | 85.51 | 93.41 | 90.25 | triangle=84.25 square=82.38 house=77.70 circle=81.70 smiley=73.85 | **87.17** | 80 | **PASS (margin +7.17)** ✓ |
 | `blair-mobile-9` genuine #5 | Genuine prod (5th verify, ~1 min after #4) | iPhone touch | 82.59 | 92.88 | 88.76 | house=75.09 circle=79.65 smiley=69.73 square=76.61 triangle=87.79 | **85.46** | 80 | **PASS (margin +5.46)** ✓ |
+| `blair-mobile-9` forgery #1 | **Daughter forgery** (12yo, post-fix baseline) — knowledge level TBD | iPhone touch | 37.74 | 79.37 | 62.72 | circle=79.05 triangle=86.55 smiley=51.33 square=64.94 house=62.62 | **64.57** | 80 | **FAIL (margin -15.43)** ✓ correctly rejected |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -368,6 +369,30 @@ Per-bucket ranges across N=5:
 - **Kinematic: 73.99–94.15 (20pt — wide but all in healthy band)**
 
 Kinematic being the widest-variance bucket is expected (velocity/acceleration naturally fluctuate session-to-session). Pre-fix: same variance caused kinematic to land 30-45. Post-fix: 74-94. The 2× envelope is absorbing real within-user noise exactly as modeled.
+
+#### Asymmetry validation (post-fix forgery)
+
+12yo daughter forgery attempt #6 scored 64.57, margin -15.43 below threshold. Rose 4.01 points vs pre-fix forgery (60.56) — expected, since the 2× fix widens tolerance for all scorers including forgers. But genuine rose MORE:
+
+```
+Pre-fix:  genuine 80.90, forgery 60.56, gap = 20.34
+Post-fix: genuine 86.79, forgery 64.57, gap = 22.22  (gap widened +1.88)
+```
+
+Confirms the asymmetric win the fix was designed for. Genuine features sit just outside tight tolerance → 2× unclamps many. Forgery features sit way outside → most stay clamped even with 2× width.
+
+Per-bucket forgery breakdown:
+- Timing 37.42 (user: 85-92) — forger didn't know user's rhythm
+- Kinematic 33.47 (user: 74-94) — velocity profile differs
+- Geometric 40.76 (user: 77-80) — shape trace imperfect
+- DTW 79.37 (user: 92-94) — trajectory partially matched
+- Pressure null (correctly — touch input, no real pressure anywhere)
+
+DTW 79.37 is decent for a forgery (would pass DTW-only test), but feature-based timing/kinematic divergence caught it. This reinforces that fusion is doing real work — neither DTW nor feature-only would have caught this alone.
+
+**Threshold implication**: with 5/5 genuine ≥ 85.46 and forgery at 64.57, threshold could safely move from 80 → 83-85 without rejecting observed genuine. Holding off until N≥2 forgery attempts (including at least one *informed* forgery — i.e. daughter sees photos of the user's enrolled strokes) to be confident we're not tuning against a single blind-forgery data point.
+
+---
 
 **Shape-biometric drift across repeated attempts** (reframed after user clarification):
 
