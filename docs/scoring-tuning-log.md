@@ -369,7 +369,7 @@ Per-bucket ranges across N=5:
 
 Kinematic being the widest-variance bucket is expected (velocity/acceleration naturally fluctuate session-to-session). Pre-fix: same variance caused kinematic to land 30-45. Post-fix: 74-94. The 2× envelope is absorbing real within-user noise exactly as modeled.
 
-**Shape-biometric drift across repeated attempts** (new observation, worth flagging):
+**Shape-biometric drift across repeated attempts** (reframed after user clarification):
 
 | Shape | #1 | #2 | #3 | #4 | #5 |
 |---|---|---|---|---|---|
@@ -379,7 +379,9 @@ Kinematic being the widest-variance bucket is expected (velocity/acceleration na
 | square | 82.93 | 81.65 | 84.68 | 82.38 | 76.61 |
 | circle | 87.75 | 84.29 | 79.79 | 81.70 | 79.65 |
 
-Drawings (smiley, house) show clear downward drift across repeated same-session attempts — not a random fluctuation. Triangle/square/circle stay stable. Hypothesis: single-sample shape baselines use CV-prior stddevs (not real computed variance) and those priors may be too tight for drawings specifically — or drawings simply have more within-user session-to-session variance than geometric shapes. All still clear the 35 shape-min floor so not blocking; worth investigating once we have N=10+ data across different sessions (not consecutive).
+Initial read was "drawings have session-drift". User confirmed: they were **deliberately signing faster each attempt** from #3 onward. Drawings (smiley = 4+ strokes, house = 4-5) take the biggest hit from rushed input because each complex multi-stroke shape has more timing/geometric variance to compress. Single-stroke geometric shapes (circle, triangle) stay stable because there's less within-shape to disturb. The bucket is correctly reflecting "I drew this one in a hurry" — NOT evidence of a tuning bug.
+
+Reframes the N=5 result in a stronger light: 3 of 5 attempts were deliberately-varied adversarial-genuine captures, and all passed with ≥5-point margin. Pre-fix couldn't handle a *normally-varying* attempt (attempt #5 on blair-mobile-7 failed at 78.78); post-fix handles deliberately-rushed attempts cleanly. The "I'm-in-a-hurry" real-world variance path works.
 
 **Devices tested so far**:
 
