@@ -16,6 +16,7 @@ const SHAPE_LABELS: Record<string, string> = {
   triangle: 'Draw a Triangle',
   house: 'Draw a House',
   smiley: 'Draw a Smiley Face',
+  heart: 'Draw a Heart',
 };
 
 export class UIRenderer {

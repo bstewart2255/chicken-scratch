@@ -9,6 +9,7 @@ const CHALLENGE_LABELS: Record<ChallengeItemType, string> = {
   triangle: 'Draw a Triangle',
   house: 'Draw a House',
   smiley: 'Draw a Smiley Face',
+  heart: 'Draw a Heart',
 };
 
 interface Props {

@@ -53,7 +53,7 @@ const RawSignatureDataSchema = z.object({
 });
 
 const ShapeDataSchema = z.object({
-  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley']),
+  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley', 'heart']),
   signatureData: RawSignatureDataSchema,
 });
 
@@ -70,7 +70,7 @@ export const TenantEnrollRequestSchema = z.object({
 
 export const TenantShapeEnrollRequestSchema = z.object({
   externalUserId: externalUserIdField,
-  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley']),
+  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley', 'heart']),
   signatureData: RawSignatureDataSchema,
 });
 

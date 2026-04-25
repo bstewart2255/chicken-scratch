@@ -1,4 +1,4 @@
-import type { StrokePoint, ChallengeItemType, ShapeSpecificFeatures, CircleFeatures, SquareFeatures, TriangleFeatures, HouseFeatures, SmileyFeatures, Stroke } from '@chicken-scratch/shared';
+import type { StrokePoint, ChallengeItemType, ShapeSpecificFeatures, CircleFeatures, SquareFeatures, TriangleFeatures, HouseFeatures, SmileyFeatures, HeartFeatures, Stroke } from '@chicken-scratch/shared';
 import { THRESHOLDS } from '@chicken-scratch/shared';
 import { distance, mean, stddev, boundingBox, curvature } from './helpers/math.js';
 import { detectCorners, calculatePathLength, calculateLineDeviation, centroid, pointToLineDistance } from './helpers/shape-math.js';
@@ -23,6 +23,7 @@ export function extractShapeSpecificFeatures(
     case 'triangle': return extractTriangleFeatures(points);
     case 'house': return extractHouseFeatures(strokes, points);
     case 'smiley': return extractSmileyFeatures(strokes, points);
+    case 'heart': return extractHeartFeatures(points);
   }
 }
 
@@ -433,6 +434,76 @@ function extractSmileyFeatures(strokes: Stroke[], points: StrokePoint[]): Smiley
   return { featurePlacement, strokeSequencing, facialSymmetry, componentProportions };
 }
 
+// ─── Heart ───────────────────────────────────────────────────────────────────
+
+/**
+ * Heart features — chosen for "stylistic identity" rather than
+ * "anatomy detection." Each captures a dimension along which different
+ * people draw their hearts differently. Doesn't require detecting
+ * cusps/lobes specifically.
+ *
+ *   - aspectRatio:           overall shape proportions
+ *   - verticalCenterRatio:   where ink mass sits vertically
+ *   - topHalfPeakCount:      how many "lobe peaks" the user produces
+ *   - bottomPointSharpness:  pointy bottom vs rounded
+ */
+function extractHeartFeatures(points: StrokePoint[]): HeartFeatures {
+  const bbox = boundingBox(points);
+  const width = bbox.maxX - bbox.minX;
+  const height = bbox.maxY - bbox.minY;
+
+  const aspectRatio = height > 0 ? width / height : 1;
+
+  // Where does the ink "weight" sit vertically? Bigger top lobes pull the
+  // centroid lower in the bbox (note: in canvas coords, larger Y = lower).
+  const c = centroid(points);
+  const verticalCenterRatio = height > 0 ? (c.y - bbox.minY) / height : 0.5;
+
+  // Count local maxima in Y in the TOP HALF of the bbox. Standard hearts have
+  // 2 (the two lobe peaks); some people draw with 1 fluid sweep producing 1.
+  // Per-user consistency on this count is the signal.
+  // (Canvas Y grows downward, so "top" = small Y. "Peak" in the top half
+  // means a local MIN in y-coordinates.)
+  const topHalfThreshold = bbox.minY + height * 0.5;
+  const topPoints = points.filter(p => p.y < topHalfThreshold);
+  let topHalfPeakCount = 0;
+  // A peak is a point where Y is locally minimal among its neighbors within
+  // the top half. Use a small window to suppress micro-jitter.
+  const window = Math.max(2, Math.floor(topPoints.length / 30));
+  for (let i = window; i < topPoints.length - window; i++) {
+    let isMin = true;
+    for (let j = 1; j <= window; j++) {
+      if (topPoints[i].y >= topPoints[i - j].y || topPoints[i].y >= topPoints[i + j].y) {
+        isMin = false;
+        break;
+      }
+    }
+    if (isMin) topHalfPeakCount++;
+  }
+
+  // Sharpness at the bottom-most point (the heart's point). 3-point curvature
+  // around the lowest-Y point. Pointy heart → high curvature; rounded → low.
+  let bottomPointSharpness = 0;
+  if (points.length >= 3) {
+    let bottomIdx = 0;
+    let bottomY = -Infinity;
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].y > bottomY) { // canvas-down = bigger Y
+        bottomY = points[i].y;
+        bottomIdx = i;
+      }
+    }
+    // Pick neighbors a few steps away to avoid jitter at the exact tip.
+    const offset = Math.max(1, Math.floor(points.length / 40));
+    const a = points[Math.max(0, bottomIdx - offset)];
+    const b = points[bottomIdx];
+    const c2 = points[Math.min(points.length - 1, bottomIdx + offset)];
+    bottomPointSharpness = curvature(a, b, c2);
+  }
+
+  return { aspectRatio, verticalCenterRatio, topHalfPeakCount, bottomPointSharpness };
+}
+
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 function getDefaultFeatures(shapeType: ChallengeItemType): ShapeSpecificFeatures {
@@ -447,5 +518,7 @@ function getDefaultFeatures(shapeType: ChallengeItemType): ShapeSpecificFeatures
       return { roofToBaseRatio: 0.5, symmetryScore: 0.5, connectionTechnique: 0.5, lineStability: 0 };
     case 'smiley':
       return { featurePlacement: 0.5, strokeSequencing: 0, facialSymmetry: 0.5, componentProportions: 0 };
+    case 'heart':
+      return { aspectRatio: 1, verticalCenterRatio: 0.5, topHalfPeakCount: 0, bottomPointSharpness: 0 };
   }
 }

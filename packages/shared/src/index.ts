@@ -39,6 +39,7 @@ export type {
   TriangleFeatures,
   HouseFeatures,
   SmileyFeatures,
+  HeartFeatures,
   ShapeSpecificFeatures,
   ShapeEnrollmentRequest,
   ShapeData,

@@ -80,12 +80,12 @@ export const VerifyRequestSchema = z.object({
 
 export const ShapeEnrollmentRequestSchema = z.object({
   username: USERNAME_SCHEMA,
-  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley']),
+  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley', 'heart']),
   signatureData: RawSignatureDataSchema,
 });
 
 const ShapeDataSchema = z.object({
-  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley']),
+  shapeType: z.enum(['circle', 'square', 'triangle', 'house', 'smiley', 'heart']),
   signatureData: RawSignatureDataSchema,
 });
 

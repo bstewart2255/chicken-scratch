@@ -1,16 +1,30 @@
 import type { RawSignatureData } from './stroke.js';
 
+/**
+ * `ShapeType` retains 'triangle' even though it's been removed from the
+ * default challenge set (SHAPE_TYPES below) — historical baselines stored
+ * before the 2026-04 swap may still carry triangle data, and we want
+ * those rows to typecheck if anyone reads them. New enrollments will not
+ * include triangle.
+ */
 export type ShapeType = 'circle' | 'square' | 'triangle';
-export type DrawingType = 'house' | 'smiley';
+export type DrawingType = 'house' | 'smiley' | 'heart';
 export type ChallengeItemType = ShapeType | DrawingType;
 
-export const SHAPE_TYPES: ShapeType[] = ['circle', 'square', 'triangle'];
-export const DRAWING_TYPES: DrawingType[] = ['house', 'smiley'];
+/**
+ * The active challenge set used to build new enrollment + verify sessions.
+ * Triangle was dropped 2026-04 because forgery analysis showed it carried
+ * weak per-user identity (forgers scoring 85+ on it consistently — a
+ * triangle is a triangle). Heart was added in its place: drawings carry
+ * stronger per-user stylistic signal than simple geometric shapes.
+ */
+export const SHAPE_TYPES: ShapeType[] = ['circle', 'square'];
+export const DRAWING_TYPES: DrawingType[] = ['house', 'smiley', 'heart'];
 export const ALL_CHALLENGE_TYPES: ChallengeItemType[] = [...SHAPE_TYPES, ...DRAWING_TYPES];
 
 /** Check if a challenge item is a drawing type */
 export function isDrawingType(type: string): type is DrawingType {
-  return type === 'house' || type === 'smiley';
+  return type === 'house' || type === 'smiley' || type === 'heart';
 }
 
 // Shape-specific features (4 per shape type)
@@ -49,9 +63,22 @@ export interface SmileyFeatures {
   componentProportions: number;   // ratio of feature sizes to face diameter
 }
 
+/**
+ * Heart features — chosen for "stylistic identity" rather than "anatomy
+ * detection." Each captures a dimension along which different people
+ * draw their hearts differently, without needing the extractor to
+ * detect cusps or lobes per se.
+ */
+export interface HeartFeatures {
+  aspectRatio: number;            // bbox width / bbox height. Tall narrow vs short squat heart.
+  verticalCenterRatio: number;    // (centroid_y − minY) / bbox_height. Where the ink mass sits vertically — bigger top lobes pull it down.
+  topHalfPeakCount: number;       // number of local-maxima-in-Y in the top half. ~2 for canonical hearts; user may consistently produce more or fewer.
+  bottomPointSharpness: number;   // 3-point curvature at the lowest-Y point. Pointy bottom vs rounded.
+}
+
 export type ShapeSpecificFeatures =
   | CircleFeatures | SquareFeatures | TriangleFeatures
-  | HouseFeatures | SmileyFeatures;
+  | HouseFeatures | SmileyFeatures | HeartFeatures;
 
 export interface ShapeEnrollmentRequest {
   username: string;
