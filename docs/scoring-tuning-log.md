@@ -290,7 +290,8 @@ Real-user genuine single data point: 88.29.
 | `blair-mobile-9` genuine #3 | Genuine prod (3rd verify, ~10 min after #2) | iPhone touch | 79.27 | 93.05 | 87.54 | triangle=86.22 square=84.68 circle=79.79 smiley=75.15 house=82.38 | **85.77** | 80 | **PASS (margin +5.77)** ✓ |
 | `blair-mobile-9` genuine #4 | Genuine prod (4th verify, ~1 min after #3) | iPhone touch | 85.51 | 93.41 | 90.25 | triangle=84.25 square=82.38 house=77.70 circle=81.70 smiley=73.85 | **87.17** | 80 | **PASS (margin +7.17)** ✓ |
 | `blair-mobile-9` genuine #5 | Genuine prod (5th verify, ~1 min after #4) | iPhone touch | 82.59 | 92.88 | 88.76 | house=75.09 circle=79.65 smiley=69.73 square=76.61 triangle=87.79 | **85.46** | 80 | **PASS (margin +5.46)** ✓ |
-| `blair-mobile-9` forgery #1 | **Daughter forgery** (12yo, post-fix baseline) — knowledge level TBD | iPhone touch | 37.74 | 79.37 | 62.72 | circle=79.05 triangle=86.55 smiley=51.33 square=64.94 house=62.62 | **64.57** | 80 | **FAIL (margin -15.43)** ✓ correctly rejected |
+| `blair-mobile-9` forgery #1 | **Daughter forgery — BLIND** (12yo, no reference) | iPhone touch | 37.74 | 79.37 | 62.72 | circle=79.05 triangle=86.55 smiley=51.33 square=64.94 house=62.62 | **64.57** | 80 | **FAIL (margin -15.43)** ✓ correctly rejected |
+| `blair-mobile-9` forgery #2 | **Daughter forgery — INFORMED** (12yo, with photos of signature + 4 of 5 shapes; no photo of triangle; took 71.6s — careful attempt) | iPhone touch | 43.88 | 76.59 | 63.51 | triangle=85.77 circle=78.19 house=72.54 square=71.56 smiley=45.49 | **65.67** | 80 | **FAIL (margin -14.33)** ✓ pilot-critical test passed |
 
 Genuine + daughter-forgery calibration run for `blair-mobile-7` account (mobile-enrolled, mobile-verified). Observations from N=3 genuine + N=1 forgery:
 
@@ -391,6 +392,36 @@ Per-bucket forgery breakdown:
 DTW 79.37 is decent for a forgery (would pass DTW-only test), but feature-based timing/kinematic divergence caught it. This reinforces that fusion is doing real work — neither DTW nor feature-only would have caught this alone.
 
 **Threshold implication**: with 5/5 genuine ≥ 85.46 and forgery at 64.57, threshold could safely move from 80 → 83-85 without rejecting observed genuine. Holding off until N≥2 forgery attempts (including at least one *informed* forgery — i.e. daughter sees photos of the user's enrolled strokes) to be confident we're not tuning against a single blind-forgery data point.
+
+#### Informed-forgery pilot-critical test (2026-04-25)
+
+Daughter (12yo) attempted forgery with photos of the enrolled signature and 4 of 5 shapes (no photo of triangle). 71.6 seconds of careful, studied effort. Result: **65.67 — rejected with 14.33-point margin**.
+
+Blind vs informed delta is striking:
+
+| | Blind (#6) | Informed (#7) | Δ |
+|---|---|---|---|
+| Final | 64.57 | 65.67 | **+1.10** |
+| Feature | 37.74 | 43.88 | +6.14 |
+| DTW | 79.37 | 76.59 | −2.78 |
+| Timing | 37.42 | 41.92 | +4.50 |
+| Kinematic | 33.47 | 57.59 | +24.12 |
+
+**Photos helped ~1 point on final score** despite 24-point improvement on kinematic. Timing stayed terrible because **you can't see timing in a photo** — rhythm, pause patterns, stroke-by-stroke pacing are all invisible to visual study. Feature-based timing bucket caught the attack.
+
+**Triangle outlier is diagnostic**: the ONE shape she didn't have a photo of scored 85.77 (her highest), while smiley (with photo) scored 45.49 (her lowest). Triangles carry less per-user identity — a triangle is a triangle. Smileys carry high per-user identity — your smiley is specifically yours. The shape-specific bucket is correctly discriminating across the shape set.
+
+**Pilot-security claim now defensible**: "Photos of your signature don't meaningfully help an attacker." The biometric signal that matters (timing, velocity, stroke dynamics) is invisible in static images, and the system captures it well enough that visual reference produces only marginal forger improvement. Resolves the original concern that started this entire tuning thread (wife's 81% score on the pre-v3 legacy matcher).
+
+Final gap summary post-tuning:
+```
+Genuine (N=5):          85.46 – 88.12   mean 86.79, σ 1.01
+Daughter blind:         64.57          margin -15.43
+Daughter informed:      65.67          margin -14.33
+
+Genuine-min vs informed-forger gap: 19.79 points
+Forgery vs threshold gap:           14.33 points
+```
 
 ---
 
