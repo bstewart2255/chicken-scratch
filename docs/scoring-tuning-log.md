@@ -67,7 +67,9 @@ signatureScore = scoreSignatureAttempt() =
 shapeCombinedScore = biometric(70%) + shape-specific(30%)
   biometric = compareFeatures(shapeBaseline, attemptBio, shapeStddevs)
               ← uses Mahalanobis with CV-prior-derived stddevs (shapes enroll 1 sample each)
-  shape-specific = per-shape features (circle/square/triangle/house/smiley), 4 each, relative-error
+  shape-specific = per-shape features, 4 each, relative-error
+                   active shapes: circle, square (geometric) + house, smiley, heart (drawings)
+                   triangle kept in ShapeType union for back-compat but removed from active SHAPE_TYPES
 
 Gates (ALL must pass):
   signatureScore >= SIGNATURE_MIN_THRESHOLD (65)
@@ -467,6 +469,46 @@ Production flow — DESKTOP TRACKPAD (1 genuine attempt so far — NOT enough fo
 - **Kinematic collapsed to 33.93.** Likely two-factor: (a) enrollment σ < test-time σ (known DSV problem — 3 enrollment samples captured in one focused session underestimate real variation), (b) trackpad-vs-touch kinematic distribution mismatch against mobile-tuned priors.
 - **Margin only 3.25 points above threshold.** Uncomfortably thin for a single pass. Need 4 more genuine attempts on this same device class to see the distribution width before retuning.
 - Shape-specific score on smiley = 68.89 (vs triangle 100, circle 91) — may indicate smiley features are noisier on trackpad, or the user's smiley differs more stroke-to-stroke. Worth watching across repeats.
+
+### Phase 1 shape-set swap — `triangle → heart` (2026-04-25)
+
+**Rationale**: informed-forgery test (2026-04-25, above) showed triangle is the weakest per-user discriminator — daughter scored 85.77 on the ONE shape she didn't have a reference photo of, confirming triangles carry less per-user identity than any other shape. Replacing geometric shapes with drawings that have more intra-user signature should widen the genuine/forger gap; starting with the weakest (triangle) before touching circle/square.
+
+**Change** (commit [4795d2f](https://github.com/bstewart2255/chicken-scratch/commit/4795d2f)):
+- `SHAPE_TYPES` = `['circle', 'square']` (triangle removed from active set)
+- `DRAWING_TYPES` = `['house', 'smiley', 'heart']` (heart added)
+- New `HeartFeatures` type: `aspectRatio`, `verticalCenterRatio`, `topHalfPeakCount`, `bottomPointSharpness`
+- `extractHeartFeatures(points)` added to `packages/backend/src/features/extraction/shape.ts`
+- Triangle kept in `ShapeType` union for back-compat with existing baselines
+
+**Migration 020 → 021 hotfix** (commit [da070e0](https://github.com/bstewart2255/chicken-scratch/commit/da070e0)):
+Migration 020 `DROP CONSTRAINT IF EXISTS shape_samples_shape_type_check` silently no-op'd because Postgres had auto-named the actual constraint `shape_samples_new_shape_type_check` (migration 006 had created the table as `shape_samples_new` then `ALTER TABLE ... RENAME TO shape_samples` — **Postgres does NOT rename associated constraints during a table rename**). Net effect: the new `ADD CONSTRAINT` created a second constraint alongside the old one. Both fired on insert; the old one rejected heart rows. Users hit a 500 on heart submission.
+
+Migration 021 uses a PL/pgSQL `DO` block to dynamically enumerate and drop all `CHECK` constraints on `shape_type` regardless of name, then adds the correct one with a known name. Idempotent. **Pattern to watch for in future migrations**: never assume a constraint name when the table has ever been renamed.
+
+**N=3 genuine verifies on blair-mobile-11** (all passing, iPhone Safari touch, no real pressure):
+
+| Attempt | Final | Sig fused | Heart | Circle | Square | House | Smiley |
+|---|---|---|---|---|---|---|---|
+| #1 | 86.37 | 90.39 | **64.20** | 81.26 | 80.44 | 83.54 | 75.52 |
+| #2 | 83.05 | 84.07 | **81.29** | 77.74 | 86.82 | 79.79 | 77.73 |
+| #3 | 86.27 | 91.19 | **72.44** | 69.43 | 85.68 | 70.28 | 76.06 |
+| **mean** | 85.23 | 88.55 | **72.64** | 76.14 | 84.31 | 77.87 | 76.44 |
+| **σ** | 1.92 | 3.95 | **8.55** | 5.94 | 3.48 | 6.94 | 1.11 |
+
+**Interpretation**:
+
+- **Heart has the widest within-user variance of any shape (σ 8.55)** — consistent with the hypothesis that drawings carry more per-session drift than geometric shapes. Attempt #1's 64.20 was not an outlier; attempt #3's 72.44 confirms heart lives in the 60-80 range, not 80+.
+- **Heart has the lowest genuine mean (72.64)**. If informed forgers drop into the 40s on heart (as daughter did on smiley at 45.49), the asymmetry test passes — the discriminator is more selective even though it costs genuine scores.
+- **Square is now the most stable shape (σ 3.48)** — replaces triangle's former role as the consistency anchor. Circle shows more variance than pre-swap (σ 5.94).
+- **Final-score distribution: mean 85.23, σ 1.92, min 83.05** vs blair-mobile-9 pre-swap (mean 86.79, σ 1.01, min 85.46). Roughly +1σ wider on genuine final, all still well above threshold 80. The sig-heavy weighting is absorbing the added shape variance.
+- **Signature path stable across swap**: sig fused 84.07 / 90.39 / 91.19 looks like the same user-signature signal the pre-swap baseline had. Heart swap doesn't regress signature matching — as expected since signature is its own code path.
+
+**Next — critical asymmetry test**: daughter informed forgery on blair-mobile-11. The Phase 1 bet is that her heart score drops disproportionately more than her geometric scores, widening the informed-forger gap from the pre-swap baseline (14.33-pt margin). If heart scores her < 55 (vs smiley 45.49 pre-swap), the drawing swap is validated. If it only costs genuine (above) without costing forgers, Phase 1 is neutral or negative.
+
+**Phase 2 queued** (if daughter-heart test passes): replace circle or square with question mark or star. Reserve the decision until asymmetry evidence lands.
+
+---
 
 ### Device-capability detection bug — fixed, but invalidates early production data
 
