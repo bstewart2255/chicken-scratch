@@ -9,6 +9,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminTenants } from './pages/AdminTenants';
 import { AdminTenantDetail } from './pages/AdminTenantDetail';
 import { AdminSystem } from './pages/AdminSystem';
+import { ForgeryStudies } from './pages/ForgeryStudies';
 import { DemoMobile } from './pages/DemoMobile';
 
 export function App() {
@@ -30,6 +31,7 @@ export function App() {
           <Route path="/admin/tenants" element={<AdminTenants />} />
           <Route path="/admin/tenants/:tenantId" element={<AdminTenantDetail />} />
           <Route path="/admin/system" element={<AdminSystem />} />
+          <Route path="/admin/forgery-studies" element={<ForgeryStudies />} />
           <Route path="/demo/:sessionId" element={<DemoMobile />} />
         </Routes>
       </div>

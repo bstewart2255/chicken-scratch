@@ -241,3 +241,38 @@ export function revokeAdminApiKey(tenantId: string, keyId: string): Promise<{ su
 export function getAdminTenantUsage(tenantId: string, days: number = 30): Promise<{ date: string; enrollments: number; verifications: number }[]> {
   return adminRequest(`/admin/tenants/${encodeURIComponent(tenantId)}/usage?days=${days}`);
 }
+
+// Forgery Study — admin-gated management API
+import type {
+  ForgeryStudyTargetUser,
+  ForgeryStudyCreateRequest,
+  ForgeryStudyCreateResponse,
+  ForgeryStudySummary,
+  ForgeryStudyResults,
+} from '@chicken-scratch/shared';
+
+export function getForgeryStudyUsers(): Promise<ForgeryStudyTargetUser[]> {
+  return adminRequest('/forgery-study/users');
+}
+
+export function setForgeryResearchTarget(
+  username: string,
+  enabled: boolean,
+): Promise<{ success: boolean; username: string; researchTarget: boolean }> {
+  return adminRequest(`/forgery-study/users/${encodeURIComponent(username)}/research-target`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function createForgeryStudy(body: ForgeryStudyCreateRequest): Promise<ForgeryStudyCreateResponse> {
+  return adminRequest('/forgery-study', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function listForgeryStudies(): Promise<ForgeryStudySummary[]> {
+  return adminRequest('/forgery-study');
+}
+
+export function getForgeryStudyResults(id: string): Promise<ForgeryStudyResults> {
+  return adminRequest(`/forgery-study/${encodeURIComponent(id)}/results`);
+}

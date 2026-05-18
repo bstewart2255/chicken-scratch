@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 const navItems = [
   { path: '/admin', label: 'Dashboard' },
   { path: '/admin/tenants', label: 'Tenants' },
+  { path: '/admin/forgery-studies', label: 'Forgery Studies' },
   { path: '/admin/system', label: 'System' },
 ];
 

@@ -38,6 +38,12 @@ export function createApp() {
     }));
   }
 
+  // Serve the standalone Forgery Study app at /forge (its Vite base is /forge/).
+  const forgeryStudyDist = path.resolve(process.cwd(), '../forgery-study/dist');
+  if (fs.existsSync(forgeryStudyDist)) {
+    app.use('/forge', express.static(forgeryStudyDist));
+  }
+
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -148,6 +154,14 @@ export function createApp() {
   app.use(adminRoutes);
   app.use(demoRoutes);
   app.use(forgeryStudyRoutes);
+
+  // Deep links into the Forgery Study app (/forge/<studyId>) — serve its
+  // index.html so the client can read the study id off the path.
+  if (fs.existsSync(forgeryStudyDist)) {
+    app.get('/forge/*', (_req, res) => {
+      res.sendFile(path.join(forgeryStudyDist, 'index.html'));
+    });
+  }
 
   // SPA catch-all — serve index.html for client-side routes (uses frontendDist from top of function)
   if (fs.existsSync(frontendDist)) {
