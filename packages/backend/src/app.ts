@@ -13,6 +13,7 @@ import diagnosticsRoutes from './routes/diagnostics.routes.js';
 import tenantApiRoutes from './routes/tenant-api.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import demoRoutes from './routes/demo.routes.js';
+import forgeryStudyRoutes from './routes/forgery-study.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +147,7 @@ export function createApp() {
   app.use(tenantApiRoutes);
   app.use(adminRoutes);
   app.use(demoRoutes);
+  app.use(forgeryStudyRoutes);
 
   // SPA catch-all — serve index.html for client-side routes (uses frontendDist from top of function)
   if (fs.existsSync(frontendDist)) {

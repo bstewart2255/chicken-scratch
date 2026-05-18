@@ -73,6 +73,21 @@ export type {
   ForgerySimulationResult,
 } from './types/diagnostics.js';
 
+export type {
+  ForgeryItemType,
+  ReferencePolylines,
+  ForgeryStudyItem,
+  ForgeryStudyView,
+  ForgeryAttemptSubmission,
+  ForgeryAttemptResult,
+  ForgeryStudySummary,
+  ForgeryStudyAttemptDetail,
+  ForgeryStudyResults,
+  ForgeryStudyCreateRequest,
+  ForgeryStudyCreateResponse,
+  ForgeryStudyTargetUser,
+} from './types/forgery-study.js';
+
 // Constants
 export { THRESHOLDS, DEMO_CHALLENGE_TYPES, CURRENT_POLICY_VERSION, PRIVACY_POLICY_URL } from './constants/thresholds.js';
 

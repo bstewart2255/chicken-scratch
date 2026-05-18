@@ -6,6 +6,7 @@ export interface UserRow {
   id: string;
   username: string;
   enrolled: boolean;
+  research_target: boolean;
   created_at: string;
 }
 
@@ -26,8 +27,21 @@ export async function findByUsername(username: string): Promise<UserRow | undefi
   return result.rows[0];
 }
 
+export async function findById(id: string): Promise<UserRow | undefined> {
+  const result = await query<UserRow>(
+    'SELECT * FROM users WHERE id = $1',
+    [id],
+  );
+  return result.rows[0];
+}
+
 export async function markEnrolled(userId: string): Promise<void> {
   await query('UPDATE users SET enrolled = TRUE WHERE id = $1', [userId]);
+}
+
+/** Opt a user in or out as a forgery-study target (see migration 022). */
+export async function setResearchTarget(userId: string, enabled: boolean): Promise<void> {
+  await query('UPDATE users SET research_target = $1 WHERE id = $2', [enabled, userId]);
 }
 
 export async function listUsers(): Promise<UserRow[]> {

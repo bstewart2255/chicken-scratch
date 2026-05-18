@@ -110,6 +110,129 @@ export async function verifySignature(
   };
 }
 
+export interface FullAttemptScoring {
+  finalScore: number;
+  authenticated: boolean;
+  signatureScore: number;
+  shapeScores: ShapeScoreBreakdown[];
+  shapeDetails: ShapeAttemptDetail[];
+  sigComparison: ReturnType<typeof scoreSignatureAttempt>;
+  attemptSigFeatures: AllFeatures;
+}
+
+export type ScoreFullAttemptResult =
+  | { ok: true; scoring: FullAttemptScoring }
+  | { ok: false; message: string; errorCode?: 'DEVICE_CLASS_MISMATCH'; enrolledClasses?: string[] };
+
+/**
+ * Score a signature + shapes against a user's baselines for a device
+ * class. This is the shared scoring core: `verifyFull` wraps it with
+ * challenge validation, attempt recording, and attestation; the forgery
+ * study calls it directly. One implementation means the study scores
+ * identically to production.
+ */
+export async function scoreFullAttempt(
+  user: userRepo.UserRow,
+  signatureData: RawSignatureData,
+  shapes: ShapeData[],
+  deviceClass: DeviceClass,
+): Promise<ScoreFullAttemptResult> {
+  const threshold = THRESHOLDS.AUTH_SCORE_DEFAULT;
+
+  if (!user.enrolled) {
+    return { ok: false, message: 'User has not completed enrollment.' };
+  }
+
+  const sigBaseline = await sigRepo.getBaseline(user.id, deviceClass);
+  if (!sigBaseline) {
+    const enrolled = await sigRepo.getEnrolledClasses(user.id);
+    if (enrolled.length === 0) {
+      return { ok: false, message: 'No signature baseline found.' };
+    }
+    return {
+      ok: false,
+      message: `You enrolled on ${enrolled.join(' / ')}. Switch to one of those devices to verify, or add this device to your account.`,
+      errorCode: 'DEVICE_CLASS_MISMATCH',
+      enrolledClasses: enrolled,
+    };
+  }
+
+  const attemptSigFeatures = extractAllFeatures(signatureData);
+  const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
+  const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
+
+  // Signature scoring uses DTW + feature fusion. Shape biometrics below use
+  // the feature-only path — shapes enroll one sample per type, so DTW's
+  // best-of-N aggregation would only ever see one reference.
+  const sigEnrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
+  const sigEnrollmentStrokes = sigEnrollmentSamples.map(
+    s => JSON.parse(s.stroke_data) as RawSignatureData,
+  );
+  const sigComparison = scoreSignatureAttempt(
+    baselineSigFeatures,
+    baselineSigStdDevs,
+    sigEnrollmentStrokes,
+    signatureData,
+    attemptSigFeatures,
+  );
+  const signatureScore = sigComparison.score;
+
+  const shapeScores: ShapeScoreBreakdown[] = [];
+  const shapeDetails: ShapeAttemptDetail[] = [];
+
+  for (const shape of shapes) {
+    const itemType = shape.shapeType as ChallengeItemType;
+    const shapeBaseline = await shapeRepo.getShapeBaseline(user.id, itemType, deviceClass);
+    if (!shapeBaseline) {
+      return { ok: false, message: `No baseline found for '${shape.shapeType}' on ${deviceClass}.` };
+    }
+
+    const strokes = extractStrokes(shape.signatureData);
+    const attemptBiometric = extractAllFeatures(shape.signatureData);
+    const attemptShapeFeatures = extractShapeSpecificFeatures(strokes, itemType);
+    const baselineBiometric = JSON.parse(shapeBaseline.avg_biometric_features) as AllFeatures;
+    const baselineShapeFeatures = JSON.parse(shapeBaseline.avg_shape_features) as ShapeSpecificFeatures;
+    // Shape baselines hold per-user biometric stddevs (migration 019 + CV-prior
+    // defaults at enrollment). May be null for pre-migration rows; the matcher
+    // falls back cleanly.
+    const baselineShapeStdDevs = shapeBaseline.biometric_std_devs
+      ? JSON.parse(shapeBaseline.biometric_std_devs) as Record<string, number>
+      : undefined;
+
+    const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric, baselineShapeStdDevs);
+    const shapeFeatureScore = compareShapeFeatures(baselineShapeFeatures, attemptShapeFeatures);
+    const { biometricScore, shapeScore, combinedScore } = computeShapeScore(
+      baselineBiometric,
+      attemptBiometric,
+      baselineShapeFeatures,
+      attemptShapeFeatures,
+      baselineShapeStdDevs,
+    );
+
+    shapeScores.push({
+      shapeType: itemType,
+      biometricScore: Math.round(biometricScore * 100) / 100,
+      shapeScore: Math.round(shapeScore * 100) / 100,
+      combinedScore: Math.round(combinedScore * 100) / 100,
+    });
+
+    shapeDetails.push({
+      shapeType: itemType,
+      attemptBiometricFeatures: attemptBiometric,
+      attemptShapeFeatures,
+      biometricComparison,
+      shapeFeatureScore: Math.round(shapeFeatureScore * 100) / 100,
+    });
+  }
+
+  const { finalScore, authenticated } = computeCombinedScore(signatureScore, shapeScores, threshold);
+
+  return {
+    ok: true,
+    scoring: { finalScore, authenticated, signatureScore, shapeScores, shapeDetails, sigComparison, attemptSigFeatures },
+  };
+}
+
 export async function verifyFull(
   username: string,
   signatureData: RawSignatureData,
@@ -151,99 +274,24 @@ export async function verifyFull(
 
   const user = await userRepo.findByUsername(username);
   if (!user) return errorResponse('User not found.');
-  if (!user.enrolled) return errorResponse('User has not completed enrollment.');
 
-  // Load baseline for the detected device class. If none exists for this
-  // class but others are enrolled, surface the mismatch with a machine-
-  // readable code so the client can offer "switch device" or "add this device".
-  const sigBaseline = await sigRepo.getBaseline(user.id, deviceClass);
-  if (!sigBaseline) {
-    const enrolled = await sigRepo.getEnrolledClasses(user.id);
-    if (enrolled.length === 0) {
-      return errorResponse('No signature baseline found.');
-    }
+  const scored = await scoreFullAttempt(user, signatureData, shapes, deviceClass);
+  if (!scored.ok) {
     return errorResponse(
-      `You enrolled on ${enrolled.join(' / ')}. Switch to one of those devices to verify, or add this device to your account.`,
-      { errorCode: 'DEVICE_CLASS_MISMATCH', enrolledClasses: enrolled },
+      scored.message,
+      scored.errorCode
+        ? { errorCode: scored.errorCode, enrolledClasses: scored.enrolledClasses }
+        : undefined,
     );
   }
-
-  const attemptSigFeatures = extractAllFeatures(signatureData);
-  const baselineSigFeatures = JSON.parse(sigBaseline.avg_features) as AllFeatures;
-  const baselineSigStdDevs = JSON.parse(sigBaseline.feature_std_devs) as Record<string, number>;
-
-  // Signature scoring uses DTW + feature fusion (PR #3). Shape biometrics
-  // further down this function still use the feature-only path — shapes
-  // enroll one sample per type so DTW's best-of-N aggregation would only
-  // see one reference, and shapes are calibration prompts (intentionally
-  // standardized) so DTW's sequence-alignment edge is smaller there.
-  const sigEnrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
-  const sigEnrollmentStrokes = sigEnrollmentSamples.map(
-    s => JSON.parse(s.stroke_data) as RawSignatureData,
-  );
-  const sigComparison = scoreSignatureAttempt(
-    baselineSigFeatures,
-    baselineSigStdDevs,
-    sigEnrollmentStrokes,
-    signatureData,
-    attemptSigFeatures,
-  );
-  const signatureScore = sigComparison.score;
-
-  const shapeScores: ShapeScoreBreakdown[] = [];
-  const shapeDetails: ShapeAttemptDetail[] = [];
-
-  for (const shape of shapes) {
-    const itemType = shape.shapeType as ChallengeItemType;
-    const shapeBaseline = await shapeRepo.getShapeBaseline(user.id, itemType, deviceClass);
-    if (!shapeBaseline) {
-      return errorResponse(`No baseline found for '${shape.shapeType}' on ${deviceClass}.`);
-    }
-
-    const strokes = extractStrokes(shape.signatureData);
-    const attemptBiometric = extractAllFeatures(shape.signatureData);
-    const attemptShapeFeatures = extractShapeSpecificFeatures(strokes, itemType);
-    const baselineBiometric = JSON.parse(shapeBaseline.avg_biometric_features) as AllFeatures;
-    const baselineShapeFeatures = JSON.parse(shapeBaseline.avg_shape_features) as ShapeSpecificFeatures;
-    // Shape baselines hold per-user biometric stddevs (migration 019 + CV-prior
-    // defaults at enrollment time, since shapes enroll only one sample).
-    // May be null for pre-migration rows; the matcher falls back cleanly.
-    const baselineShapeStdDevs = shapeBaseline.biometric_std_devs
-      ? JSON.parse(shapeBaseline.biometric_std_devs) as Record<string, number>
-      : undefined;
-
-    const biometricComparison = compareFeatures(baselineBiometric, attemptBiometric, baselineShapeStdDevs);
-    const shapeFeatureScore = compareShapeFeatures(baselineShapeFeatures, attemptShapeFeatures);
-    const { biometricScore, shapeScore, combinedScore } = computeShapeScore(
-      baselineBiometric,
-      attemptBiometric,
-      baselineShapeFeatures,
-      attemptShapeFeatures,
-      baselineShapeStdDevs,
-    );
-
-    shapeScores.push({
-      shapeType: itemType,
-      biometricScore: Math.round(biometricScore * 100) / 100,
-      shapeScore: Math.round(shapeScore * 100) / 100,
-      combinedScore: Math.round(combinedScore * 100) / 100,
-    });
-
-    shapeDetails.push({
-      shapeType: itemType,
-      attemptBiometricFeatures: attemptBiometric,
-      attemptShapeFeatures,
-      biometricComparison,
-      shapeFeatureScore: Math.round(shapeFeatureScore * 100) / 100,
-    });
-  }
-
-  const { finalScore, authenticated } = computeCombinedScore(signatureScore, shapeScores, threshold);
+  const {
+    finalScore, authenticated, signatureScore, shapeScores, shapeDetails,
+    sigComparison, attemptSigFeatures,
+  } = scored.scoring;
 
   // Compare device fingerprints (scoped to the current device class so we
   // don't mix a phone enrollment fingerprint against a desktop verify).
-  // Reuses sigEnrollmentSamples fetched above for DTW — avoids a duplicate
-  // repository round-trip.
+  const sigEnrollmentSamples = await sigRepo.getSamples(user.id, deviceClass);
   let fingerprintMatch: Record<string, unknown> | undefined;
   if (sigEnrollmentSamples.length > 0 && signatureData.deviceCapabilities.fingerprint) {
     const enrollDeviceCaps = JSON.parse(sigEnrollmentSamples[0].device_capabilities);
