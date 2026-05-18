@@ -8,12 +8,8 @@ Working document. "Known Vulnerabilities" below is the outstanding-items list �
 
 ### Critical
 
-1. **Open diagnostics oracle.** `/api/diagnostics/*` is mounted with no auth ([app.ts:145](../packages/backend/src/app.ts#L145)). Exposes every user's attempts, scores, threshold, breakdowns, per-shape results, device fingerprint, baselines (`avgFeatures`, `stdDevs`), and enrollment samples. An unauthenticated caller can:
-   - List all users (`GET /api/diagnostics/users`)
-   - Read full attempt history and score distributions (`/users/:u/attempts`, `/users/:u/stats`)
-   - Read the mathematical description of any user's signature (`/users/:u/baseline`, `/users/:u/enrollment-samples`)
-   - **Run the forgery simulator against any user** (`POST /users/:u/forgery-simulation`) and get trial-by-trial pass/fail per skill level — a tunable false-accept-rate oracle.
-   - **Fix:** shared-secret middleware on the `/api/diagnostics/*` route group (`X-Admin-Key` header checked against a `DIAGNOSTICS_ADMIN_KEY` env var). ~1–2 hours incl. frontend dashboard plumbing.
+1. **Replay of captured genuine strokes passes verification.** The scoring path has no anti-replay defense. Exact-copy stroke data yields a DTW distance near zero and identical features, fusing to a score around 100 ([signature-fusion.ts](../packages/backend/src/features/comparison/signature-fusion.ts)). The mitigations the doc previously credited are weak: `capturedAt` is client-supplied so the freshness check is trivially satisfied; challenges are not bound to the verifying username (`verifyFull` never cross-checks the challenge's session owner); and because `shapes` is a client-assembled array, one capture per shape type can be reordered to match any challenge order. `POST /api/verify/full` and `POST /api/challenge` are both unauthenticated. An attacker who observes a user's genuine signature + shape strokes once can replay them indefinitely.
+   - **Fix:** bind each challenge to the user; add a per-capture nonce echoed by the challenge; reject stroke sets whose coordinates/timing exactly match a stored enrollment sample or a prior attempt.
 
 ### High
 
@@ -56,8 +52,9 @@ Working document. "Known Vulnerabilities" below is the outstanding-items list �
 ### Replay & session integrity
 
 - **One-time challenge tokens**, 5-minute TTL, server-minted with a randomized shape order; submitted shape sequence must match exactly and `session.status` is flipped to `completed` on use ([session.service.ts:44–136](../packages/backend/src/services/session.service.ts#L44)). Replay of a prior verify payload fails.
-- **Shape-order randomization** is enforced server-side — the client cannot pre-commit to a shape sequence, so pre-captured strokes cannot be reordered to match.
+- **Shape-order randomization** is enforced server-side — the client cannot pre-commit to a shape sequence.
 - **Fresh-timestamp requirement** on verify requests.
+- **Verify sessions are completed server-side.** `verifyFull` writes the authoritative, server-computed outcome into the challenge session and mints any attestation token there; `PATCH /api/session/:id` rejects completion of a `verify`-type session ([session.routes.ts](../packages/backend/src/routes/session.routes.ts), [auth.service.ts](../packages/backend/src/services/auth.service.ts)). A client can no longer self-report `authenticated: true` to make the server mint an attestation token for a user who never passed verification (ec5c84e).
 
 ### Authorization & tenant isolation
 
@@ -65,6 +62,7 @@ Working document. "Known Vulnerabilities" below is the outstanding-items list �
 - **Tenant-scoped user keying** — internal username format `t:{tenantId}:{externalUserId}` ([tenant.repo.ts:163](../packages/backend/src/db/repositories/tenant.repo.ts#L163)). All user lookups go through `resolveUser()` ([tenant-api.routes.ts:78](../packages/backend/src/routes/tenant-api.routes.ts#L78)) — no cross-tenant reads possible via the public API.
 - **Attestation tokens are tenant-bound**; mismatch rejected with 403 ([tenant-api.routes.ts:512](../packages/backend/src/routes/tenant-api.routes.ts#L512)).
 - **Key rotation + deactivation supported** via `rotateApiKey()`.
+- **Diagnostics gated.** `/api/diagnostics/*` (user enumeration, baselines, attempt history, enrollment samples, forgery simulator) sits behind `requireAdminKey`, disabled with a 503 when `ADMIN_API_KEY` is unset ([diagnostics.routes.ts](../packages/backend/src/routes/diagnostics.routes.ts)). The frontend diagnostics dashboard sends the admin key (ec5c84e).
 
 ### Biometric data handling
 
