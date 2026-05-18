@@ -3,11 +3,8 @@ import { useParams } from 'react-router-dom';
 import type SignaturePad from 'signature_pad';
 import { THRESHOLDS } from '@chicken-scratch/shared';
 import type { ChallengeItemType, RawSignatureData, ShapeData } from '@chicken-scratch/shared';
-import { SignatureCanvas } from '../components/SignatureCanvas';
-import { ShapeCanvas } from '../components/ShapeCanvas';
-import { useDeviceCapabilities } from '../hooks/useDeviceCapabilities';
-import { buildSignatureData } from '../lib/stroke-collector';
-import type { TiltCapture } from '../lib/tilt-capture';
+import { SignatureCanvas, ShapeCanvas, useDeviceCapabilities, buildSignatureData } from '@chicken-scratch/capture';
+import type { TiltCapture } from '@chicken-scratch/capture';
 import * as api from '../api/client';
 
 type MobileStep = 'loading' | 'signature' | 'shape' | 'submitting' | 'done' | 'error';

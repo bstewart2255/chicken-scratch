@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import SignaturePad from 'signature_pad';
-import { SignatureCanvas } from '../components/SignatureCanvas';
-import { ShapeCanvas } from '../components/ShapeCanvas';
+import { SignatureCanvas, ShapeCanvas } from '@chicken-scratch/capture';
 import {
   getSession,
   createDemoSession,

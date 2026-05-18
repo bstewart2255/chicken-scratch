@@ -4,6 +4,7 @@
   "private": true,
   "workspaces": [
     "packages/shared",
+    "packages/capture",
     "packages/backend",
     "packages/frontend",
     "packages/sdk",
