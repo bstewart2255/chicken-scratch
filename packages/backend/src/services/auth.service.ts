@@ -276,6 +276,20 @@ export async function verifyFull(
     },
   );
 
+  // Persist the server-computed outcome into the challenge session. The
+  // mobile QR flow polls this session (and the customer's backend polls it
+  // via /api/v1/mobile-session/:id) to learn the result and retrieve the
+  // attestation token. Completing the session HERE — with `authenticated`
+  // computed server-side — is what keeps it trustworthy: the client never
+  // gets to assert its own verify outcome. PATCH /api/session/:id refuses
+  // to complete verify sessions for the same reason.
+  await sessionService.completeSession(challengeId, {
+    authenticated,
+    deviceClass,
+    durationMs: timing?.durationMs,
+    stepDurations: timing?.stepDurations,
+  });
+
   return {
     success: true,
     authenticated,

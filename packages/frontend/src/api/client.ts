@@ -66,42 +66,43 @@ export function updateSession(id: string, status: string, result?: Record<string
   });
 }
 
-// Diagnostics API
+// Diagnostics API — requires the admin key (same gate as the admin API).
+// adminRequest() attaches the key from localStorage; see adminHeaders().
 import type { DiagnosticsUser, DiagnosticsAttempt, UserStats, BaselineSummary, ForgerySimulationResult } from '@chicken-scratch/shared';
 
 export function getDiagnosticsUsers(): Promise<DiagnosticsUser[]> {
-  return request('/diagnostics/users');
+  return adminRequest('/diagnostics/users');
 }
 
 export function getUserAttempts(username: string): Promise<DiagnosticsAttempt[]> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/attempts`);
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/attempts`);
 }
 
 export function getAttemptDetail(username: string, attemptId: string): Promise<DiagnosticsAttempt> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/attempts/${encodeURIComponent(attemptId)}`);
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/attempts/${encodeURIComponent(attemptId)}`);
 }
 
 export function getUserBaseline(username: string): Promise<BaselineSummary> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/baseline`);
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/baseline`);
 }
 
 export function getUserStats(username: string): Promise<UserStats> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/stats`);
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/stats`);
 }
 
 export function getEnrollmentSamples(username: string): Promise<any> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/enrollment-samples`);
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/enrollment-samples`);
 }
 
 export function setAttemptForgeryFlag(attemptId: string, isForgery: boolean): Promise<{ success: boolean; isForgery: boolean }> {
-  return request(`/diagnostics/attempts/${encodeURIComponent(attemptId)}/forgery`, {
+  return adminRequest(`/diagnostics/attempts/${encodeURIComponent(attemptId)}/forgery`, {
     method: 'PATCH',
     body: JSON.stringify({ isForgery }),
   });
 }
 
 export function runForgerySimulation(username: string, trialsPerLevel: number = 20): Promise<ForgerySimulationResult> {
-  return request(`/diagnostics/users/${encodeURIComponent(username)}/forgery-simulation`, {
+  return adminRequest(`/diagnostics/users/${encodeURIComponent(username)}/forgery-simulation`, {
     method: 'POST',
     body: JSON.stringify({ trialsPerLevel }),
   });

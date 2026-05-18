@@ -6,6 +6,7 @@ import * as sigRepo from '../db/repositories/signature.repo.js';
 import * as shapeRepo from '../db/repositories/shape.repo.js';
 import type { AllFeatures, ShapeSpecificFeatures, ChallengeItemType, DeviceClass } from '@chicken-scratch/shared';
 import { runForgerySimulation } from '../services/forgery-simulator.js';
+import { requireAdminKey } from '../middleware/admin-auth.js';
 
 /**
  * Diagnostics reads per-class data. Callers can pass ?deviceClass=mobile or
@@ -17,6 +18,18 @@ function parseDeviceClass(q: unknown): DeviceClass {
 }
 
 const router = Router();
+
+// Diagnostics exposes every user's biometric baselines, full attempt
+// history, enrollment samples, and the forgery simulator (a tunable
+// false-accept oracle). It is strictly an internal tool — gate the entire
+// surface behind the admin key. Without ADMIN_API_KEY set, the middleware
+// returns 503 and the routes are disabled.
+//
+// The path prefix is required: this router is mounted at the app root, so
+// an unscoped `router.use(requireAdminKey)` would run for every request
+// that falls through to this router (including /api/v1/*), not just
+// /api/diagnostics/*.
+router.use('/api/diagnostics', requireAdminKey);
 
 // List all users
 router.get('/api/diagnostics/users', async (_req, res, next) => {

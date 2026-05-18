@@ -253,6 +253,45 @@ describe('Tenant API (/api/v1)', () => {
     });
   });
 
+  describe('Mobile session security', () => {
+    beforeEach(async () => {
+      await request(app)
+        .post('/api/v1/consent')
+        .set('X-API-Key', apiKey)
+        .send({ externalUserId: 'user1' });
+      for (let i = 0; i < 3; i++) {
+        await request(app)
+          .post('/api/v1/enroll')
+          .set('X-API-Key', apiKey)
+          .send({ externalUserId: 'user1', signatureData: makeSignatureData() });
+      }
+    });
+
+    it('rejects client-driven completion of a verify session', async () => {
+      const created = await request(app)
+        .post('/api/v1/mobile-session')
+        .set('X-API-Key', apiKey)
+        .send({ externalUserId: 'user1', type: 'verify' });
+      expect(created.status).toBe(200);
+      const sessionId = created.body.sessionId;
+
+      // A caller tries to mark the verify session passed without ever
+      // running verification — this must be refused so the server cannot
+      // be tricked into minting an attestation token for an unverified user.
+      const patched = await request(app)
+        .patch(`/api/session/${sessionId}`)
+        .send({ status: 'completed', result: { authenticated: true, deviceClass: 'mobile' } });
+      expect(patched.status).toBe(403);
+
+      // The session must remain incomplete with no result/attestation token.
+      const polled = await request(app)
+        .get(`/api/v1/mobile-session/${sessionId}`)
+        .set('X-API-Key', apiKey);
+      expect(polled.body.status).not.toBe('completed');
+      expect(polled.body.result).toBeNull();
+    });
+  });
+
   describe('Org isolation', () => {
     let otherApiKey: string;
 

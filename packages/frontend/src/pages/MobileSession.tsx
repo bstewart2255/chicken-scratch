@@ -246,17 +246,10 @@ export function MobileSession() {
         stepDurations: stepDurationsRef.current,
       });
 
-      // Only pass authenticated status to session — no scores. Include
-      // deviceClass so the server can mint a tenant-scoped attestation
-      // token for polling clients (desktop forgot-password flow) when
-      // verify succeeds and this session was created via the tenant API.
-      await api.updateSession(sessionId!, 'completed', {
-        authenticated: verifyResult.authenticated,
-        deviceClass: deviceCaps.inputMethod === 'touch' ? 'mobile' : 'desktop',
-        durationMs,
-        stepDurations: stepDurationsRef.current,
-      });
-
+      // The server completes the verify session itself (inside verifyFull)
+      // with the authoritative, server-computed result — including any
+      // attestation token for polling clients. The client must NOT report
+      // its own outcome, so there is no updateSession() call here.
       setVerifyPassed(verifyResult.authenticated);
       setStep('done');
       setMessage(verifyResult.authenticated

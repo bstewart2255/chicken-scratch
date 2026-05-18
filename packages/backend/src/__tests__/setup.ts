@@ -29,7 +29,6 @@ export async function cleanTables(): Promise<void> {
   await query('DELETE FROM usage_events');
   await query('DELETE FROM api_keys');
   await query('DELETE FROM auth_attempts');
-  await query('DELETE FROM shape_drawings');
   await query('DELETE FROM shape_baselines');
   await query('DELETE FROM shape_samples');
   await query('DELETE FROM baselines');
